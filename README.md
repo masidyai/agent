@@ -362,3 +362,85 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
     <a href="https://masidy.ai">Website</a>
   </p>
 </div>
+
+---
+
+## 🆕 New in v2.0
+
+### Backend API (`backend_api/app/`)
+
+The backend now includes a complete production-ready API:
+
+| Feature | Description |
+|---------|-------------|
+| **Database** | SQLAlchemy 2.0 with 7 models (User, Team, Project, Billing, Deployment, Memory) |
+| **Authentication** | JWT + refresh tokens, bcrypt hashing, OAuth-ready |
+| **Billing** | Plans (free/pro/team/enterprise), usage tracking, Stripe-ready |
+| **WebSockets** | Real-time streaming with connection management |
+| **Multi-Agent** | Builder, Reviewer, Tester, Fixer, Deployer agents |
+| **Sandbox** | Safe code execution with timeouts |
+| **Deployment** | Vercel/Railway providers with config generation |
+| **Visual Builder** | 15+ UI components, templates, React code generation |
+
+### New API Endpoints
+
+```bash
+# Authentication
+POST /api/v1/auth/register     # User registration
+POST /api/v1/auth/login/json   # JWT login
+GET  /api/v1/auth/me           # Current user
+
+# Projects
+GET  /api/v1/projects/         # List projects
+POST /api/v1/projects/         # Create project
+GET  /api/v1/projects/{id}     # Get project
+
+# Billing
+GET  /api/v1/billing/plans     # Get all plans
+GET  /api/v1/billing/          # Get current billing
+
+# Teams
+GET  /api/v1/teams/            # List teams
+POST /api/v1/teams/            # Create team
+POST /api/v1/teams/{id}/invite # Invite member
+
+# Visual Builder
+GET  /api/v1/visual-builder/components  # Get components
+GET  /api/v1/visual-builder/templates   # Get templates
+
+# Sandbox
+POST /api/v1/sandbox/execute      # Execute command
+POST /api/v1/sandbox/execute-code # Execute code
+
+# WebSocket
+WS   /api/v1/ws?token=<jwt>       # Real-time connection
+GET  /api/v1/ws/stats             # Connection stats
+```
+
+### Frontend Updates
+
+- **Auth Pages**: Login, Signup, Forgot Password
+- **Billing UI**: Plans page, upgrade flow
+- **Visual Builder**: Drag-and-drop component editor
+- **WebSocket Hook**: Real-time streaming support
+- **Auth Context**: Token management provider
+
+### Docker Support
+
+```bash
+# Start with Docker Compose
+docker-compose up -d
+
+# Or build individually
+docker build --target backend -t masidy/backend .
+docker build --target frontend -t masidy/frontend .
+```
+
+### CI/CD
+
+GitHub Actions workflow for:
+- Backend tests (pytest)
+- Frontend build (Next.js)
+- Docker image builds
+- Security scanning (Trivy)
+

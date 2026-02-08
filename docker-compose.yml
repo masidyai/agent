@@ -1,0 +1,92 @@
+version: '3.8'
+
+services:
+  # ==========================================================================
+  # Backend API
+  # ==========================================================================
+  backend:
+    build:
+      context: .
+      target: backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=sqlite+aiosqlite:///./masidy.db
+      - SECRET_KEY=${SECRET_KEY:-your-secret-key-change-in-production}
+      - CORS_ORIGINS=http://localhost:3000,http://localhost:8000
+      - DEBUG=false
+    volumes:
+      - backend_data:/app/backend_api/data
+      - ./backend_api/projects:/app/backend_api/projects
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  # ==========================================================================
+  # Frontend
+  # ==========================================================================
+  frontend:
+    build:
+      context: .
+      target: frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ==========================================================================
+  # PostgreSQL (Optional - for production)
+  # ==========================================================================
+  postgres:
+    image: postgres:15-alpine
+    profiles:
+      - production
+    environment:
+      - POSTGRES_USER=masidy
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-masidy_password}
+      - POSTGRES_DB=masidy
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U masidy"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ==========================================================================
+  # Redis (Optional - for caching/sessions)
+  # ==========================================================================
+  redis:
+    image: redis:7-alpine
+    profiles:
+      - production
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  backend_data:
+  postgres_data:
+  redis_data:
+
+networks:
+  default:
+    name: masidy_network
