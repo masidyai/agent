@@ -5,29 +5,18 @@ from typing import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import declarative_base
-from sqlalchemy.pool import NullPool, QueuePool
+from sqlalchemy.pool import NullPool
 
 from app.core.config import settings
 
-# Determine pool class based on database type
-if "sqlite" in settings.database_url:
-    # SQLite doesn't support connection pooling
-    engine = create_async_engine(
-        settings.database_url,
-        echo=settings.DEBUG,
-        poolclass=NullPool,
-    )
-else:
-    # PostgreSQL with connection pooling
-    engine = create_async_engine(
-        settings.database_url,
-        echo=settings.DEBUG,
-        poolclass=QueuePool,
-        pool_size=settings.DB_POOL_SIZE,
-        max_overflow=settings.DB_MAX_OVERFLOW,
-        pool_timeout=settings.DB_POOL_TIMEOUT,
-        pool_recycle=settings.DB_POOL_RECYCLE,
-    )
+# Create async engine with NullPool (required for async engines)
+# NullPool disables connection pooling - each connection is opened/closed per request
+# This is recommended for serverless/async environments
+engine = create_async_engine(
+    settings.database_url,
+    echo=settings.DEBUG,
+    poolclass=NullPool,
+)
 
 # Async session factory
 AsyncSessionLocal = async_sessionmaker(
