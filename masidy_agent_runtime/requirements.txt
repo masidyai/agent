@@ -1,0 +1,25 @@
+# Masidy Autonomous Agent Runtime Dependencies
+# =============================================
+
+# OpenAI Swarm for agent orchestration
+# https://github.com/openai/swarm
+openai-swarm>=0.1.0
+
+# LangChain and LangGraph for planning loops
+langchain>=0.3.0
+langchain-core>=0.3.0
+langchain-openai>=0.2.0
+langgraph>=0.2.0
+
+# OpenAI client (dependency for swarm and langchain-openai)
+openai>=1.50.0
+
+# Utility libraries
+python-dotenv>=1.0.0    # Environment variable management
+
+# Optional: Development dependencies
+# -----------------------------------
+# pytest>=8.0.0         # Testing
+# pytest-asyncio>=0.24  # Async test support
+# black>=24.0.0         # Code formatting
+# ruff>=0.5.0           # Linting
