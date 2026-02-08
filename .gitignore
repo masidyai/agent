@@ -12,6 +12,12 @@ htmlcov/
 venv/
 .venv/
 
+# Node.js
+node_modules/
+.next/
+out/
+.npm
+
 # IDE
 .vscode/
 .idea/
@@ -28,3 +34,7 @@ Thumbs.db
 *.log
 *.tmp
 .cache/
+
+# Build artifacts
+*.tsbuildinfo
+next-env.d.ts

@@ -1,0 +1,7 @@
+export { Hero } from './Hero'
+export { Examples } from './Examples'
+export { Features } from './Features'
+export { Comparison } from './Comparison'
+export { Testimonials } from './Testimonials'
+export { Pricing } from './Pricing'
+export { Newsletter } from './Newsletter'

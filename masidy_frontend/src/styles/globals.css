@@ -1,0 +1,136 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@layer base {
+  :root {
+    --background: 255 255 255;
+    --foreground: 0 0 0;
+    --primary: 0 0 0;
+    --secondary: 107 114 128;
+    --accent: 59 130 246;
+    --muted: 156 163 175;
+    --border: 229 231 235;
+    --surface: 249 250 251;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-primary font-sans antialiased;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center rounded-lg font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none;
+  }
+
+  .btn-primary {
+    @apply btn bg-primary text-white hover:bg-gray-800 focus:ring-primary px-6 py-3;
+  }
+
+  .btn-secondary {
+    @apply btn bg-surface text-primary border border-border hover:bg-gray-100 focus:ring-gray-400 px-6 py-3;
+  }
+
+  .btn-ghost {
+    @apply btn text-primary hover:bg-surface px-4 py-2;
+  }
+
+  .btn-sm {
+    @apply px-4 py-2 text-sm;
+  }
+
+  .btn-lg {
+    @apply px-8 py-4 text-lg;
+  }
+
+  .input {
+    @apply w-full rounded-lg border border-border bg-white px-4 py-3 text-primary placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all duration-200;
+  }
+
+  .input-lg {
+    @apply px-6 py-4 text-lg;
+  }
+
+  .card {
+    @apply bg-white rounded-xl border border-border p-6 shadow-sm hover:shadow-md transition-shadow duration-200;
+  }
+
+  .section {
+    @apply py-20 px-4;
+  }
+
+  .container-custom {
+    @apply max-w-7xl mx-auto;
+  }
+
+  .heading-1 {
+    @apply text-5xl md:text-6xl font-bold tracking-tight;
+  }
+
+  .heading-2 {
+    @apply text-3xl md:text-4xl font-bold tracking-tight;
+  }
+
+  .heading-3 {
+    @apply text-2xl font-semibold;
+  }
+
+  .text-body {
+    @apply text-secondary text-lg;
+  }
+
+  .link {
+    @apply text-primary hover:text-accent transition-colors duration-200;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a1a1a1;
+}
+
+/* IDE specific styles */
+.ide-panel {
+  @apply bg-white border-r border-border;
+}
+
+.ide-sidebar {
+  @apply w-14 bg-surface border-r border-border flex flex-col items-center py-4 gap-2;
+}
+
+.ide-sidebar-item {
+  @apply w-10 h-10 rounded-lg flex items-center justify-center text-secondary hover:bg-white hover:text-primary transition-all cursor-pointer;
+}
+
+.ide-sidebar-item.active {
+  @apply bg-white text-primary shadow-sm;
+}
+
+.resizer {
+  @apply w-1 bg-border hover:bg-accent cursor-col-resize transition-colors;
+}
+
+.resizer-horizontal {
+  @apply h-1 bg-border hover:bg-accent cursor-row-resize transition-colors;
+}
