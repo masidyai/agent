@@ -1,0 +1,90 @@
+"""
+Billing schemas
+"""
+from datetime import datetime
+from typing import Optional
+from uuid import UUID
+
+from pydantic import BaseModel, ConfigDict
+
+from app.models.billing import BillingPlan, BillingStatus
+
+
+class BillingBase(BaseModel):
+    """Base billing schema"""
+    plan: BillingPlan = BillingPlan.FREE
+
+
+class BillingCreate(BillingBase):
+    """Schema for creating billing record"""
+    user_id: UUID
+
+
+class BillingUpdate(BaseModel):
+    """Schema for updating billing"""
+    plan: Optional[BillingPlan] = None
+    status: Optional[BillingStatus] = None
+
+
+class BillingResponse(BillingBase):
+    """Schema for billing response"""
+    model_config = ConfigDict(from_attributes=True)
+    
+    id: UUID
+    user_id: UUID
+    status: BillingStatus
+    stripe_customer_id: Optional[str] = None
+    usage_projects: int
+    usage_executions: int
+    usage_deployments: int
+    usage_api_calls: int
+    limit_projects: int
+    limit_executions: int
+    limit_deployments: int
+    current_period_start: Optional[datetime] = None
+    current_period_end: Optional[datetime] = None
+    created_at: datetime
+
+
+class UsageResponse(BaseModel):
+    """Schema for usage statistics"""
+    projects: int
+    executions: int
+    deployments: int
+    api_calls: int
+    limits: dict
+
+
+class StripeCheckoutRequest(BaseModel):
+    """Schema for creating Stripe checkout session"""
+    plan: BillingPlan
+    success_url: str
+    cancel_url: str
+
+
+class StripeCheckoutResponse(BaseModel):
+    """Schema for Stripe checkout response"""
+    checkout_url: str
+    session_id: str
+
+
+class StripeWebhookPayload(BaseModel):
+    """Schema for Stripe webhook payload"""
+    type: str
+    data: dict
+
+
+class PlanLimits(BaseModel):
+    """Schema for plan limits"""
+    projects: int
+    executions: int
+    deployments: int
+    team_members: int
+    price_monthly: float
+    price_yearly: float
+    features: list[str]
+
+
+class PlansResponse(BaseModel):
+    """Schema for available plans"""
+    plans: dict[str, PlanLimits]
