@@ -1,0 +1,63 @@
+# Render Blueprint - Masidy AI Agent Platform
+# https://render.com/docs/blueprint-spec
+
+services:
+  # ==========================================================================
+  # Backend API Service
+  # ==========================================================================
+  - type: web
+    name: masidy-backend
+    runtime: python
+    region: oregon
+    plan: free
+    rootDir: backend_api
+    buildCommand: chmod +x build.sh && ./build.sh
+    startCommand: python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.0"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: masidy-db
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: CORS_ORIGINS
+        value: https://masidy-frontend.onrender.com,http://localhost:3000
+      - key: DEBUG
+        value: "false"
+      - key: APP_NAME
+        value: "Masidy API"
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "30"
+      - key: REFRESH_TOKEN_EXPIRE_DAYS
+        value: "7"
+
+  # ==========================================================================
+  # Frontend Service
+  # ==========================================================================
+  - type: web
+    name: masidy-frontend
+    runtime: node
+    region: oregon
+    plan: free
+    rootDir: masidy_frontend
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: "18"
+      - key: NEXT_PUBLIC_API_URL
+        value: https://masidy-backend.onrender.com
+
+# ==========================================================================
+# Database
+# ==========================================================================
+databases:
+  - name: masidy-db
+    region: oregon
+    plan: free
+    databaseName: masidy
+    user: masidy

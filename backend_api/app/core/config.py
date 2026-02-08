@@ -3,8 +3,9 @@ Application configuration - Environment variables and settings
 """
 import os
 from functools import lru_cache
-from typing import Optional
+from typing import Optional, Union
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings
 
 
@@ -56,8 +57,15 @@ class Settings(BaseSettings):
     STRIPE_PRICE_ID_PRO: Optional[str] = None
     STRIPE_PRICE_ID_TEAM: Optional[str] = None
     
-    # CORS
-    CORS_ORIGINS: list[str] = ["http://localhost:3000", "https://masidy.ai"]
+    # CORS - can be comma-separated string or list
+    CORS_ORIGINS: Union[str, list[str]] = "http://localhost:3000,https://masidy.ai"
+    
+    @field_validator("CORS_ORIGINS", mode="before")
+    @classmethod
+    def parse_cors_origins(cls, v):
+        if isinstance(v, str):
+            return [origin.strip() for origin in v.split(",")]
+        return v
     
     # Rate Limiting
     RATE_LIMIT_PER_MINUTE: int = 60
