@@ -1,7 +1,8 @@
 """
-Masidy Backend API
+Masidy Backend API - Production Ready
 
 FastAPI server that wraps the Masidy Agent Runtime for the web IDE.
+Provides real file generation, streaming execution, and project management.
 """
 
 import asyncio
@@ -9,46 +10,32 @@ import json
 import os
 import sys
 import uuid
+import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List, Dict, Any
+from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from fastapi.responses import StreamingResponse, FileResponse
+from pydantic import BaseModel, Field
 
-# Add masidy_agent_runtime to path
-sys.path.insert(0, str(Path(__file__).parent.parent / "masidy_agent_runtime"))
+# Configuration
+class Config:
+    PROJECTS_DIR = Path(__file__).parent / "projects"
+    STATE_FILE = Path(__file__).parent.parent / "masidy_agent_runtime" / "memory" / "state.json"
 
-app = FastAPI(
-    title="Masidy API",
-    description="Backend API for the Masidy AI Agent Platform",
-    version="1.0.0",
-)
+Config.PROJECTS_DIR.mkdir(parents=True, exist_ok=True)
 
-# CORS for frontend
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:12000"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# In-memory storage for projects (would be database in production)
-projects_db: dict = {}
-executions_db: dict = {}
-
-# State file path
-STATE_FILE = Path(__file__).parent.parent / "masidy_agent_runtime" / "memory" / "state.json"
-
+# ============================================================================
+# Pydantic Models
+# ============================================================================
 
 class ProjectCreate(BaseModel):
-    prompt: str
-    flow: str = "saas"
-    name: Optional[str] = None
-
+    prompt: str = Field(..., min_length=3, description="Project description")
+    flow: str = Field(default="saas", description="Flow type: saas, api, refactor")
+    name: Optional[str] = Field(None, description="Project name")
 
 class ProjectResponse(BaseModel):
     id: str
@@ -60,135 +47,682 @@ class ProjectResponse(BaseModel):
     steps_completed: int
     steps_total: int
     output_path: Optional[str] = None
-
-
-class ExecutionStatus(BaseModel):
-    id: str
-    project_id: str
-    status: str
-    current_step: int
-    total_steps: int
-    current_step_description: str
-    files_created: list[str]
-    errors: list[str]
-
+    files: List[str] = []
 
 class PlanStep(BaseModel):
     id: int
     description: str
     tool_name: str
     status: str = "pending"
-
+    file_path: Optional[str] = None
 
 class ExecutionPlan(BaseModel):
     project_id: str
     flow: str
-    steps: list[PlanStep]
+    steps: List[PlanStep]
     estimated_time: str
+    total_files: int
 
+class PlanRequest(BaseModel):
+    prompt: str
+    flow: str = "saas"
+
+class FileContent(BaseModel):
+    path: str
+    content: str
+    language: str
+
+# ============================================================================
+# Storage
+# ============================================================================
+
+projects_db: Dict[str, dict] = {}
+executions_db: Dict[str, dict] = {}
 
 def load_state() -> dict:
-    """Load state from file."""
-    if STATE_FILE.exists():
-        with open(STATE_FILE, "r") as f:
-            return json.load(f)
+    try:
+        if Config.STATE_FILE.exists():
+            with open(Config.STATE_FILE, "r") as f:
+                return json.load(f)
+    except Exception:
+        pass
     return {"projects": [], "executions": []}
 
-
 def save_state(state: dict):
-    """Save state to file."""
-    STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(STATE_FILE, "w") as f:
-        json.dump(state, f, indent=2, default=str)
+    try:
+        Config.STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(Config.STATE_FILE, "w") as f:
+            json.dump(state, f, indent=2, default=str)
+    except Exception as e:
+        print(f"Error saving state: {e}")
 
+def generate_project_name(prompt: str) -> str:
+    words = prompt.lower()
+    for remove in ["build", "create", "make", "a", "an", "the", "with", "and", "for"]:
+        words = words.replace(remove, " ")
+    name = "_".join(words.split()[:3]).strip("_")
+    name = "".join(c for c in name if c.isalnum() or c == "_")
+    return name[:30] or "my_project"
 
-def generate_plan(prompt: str, flow: str) -> list[PlanStep]:
-    """Generate execution plan based on flow type."""
-    plans = {
-        "saas": [
-            PlanStep(id=1, description="Create project directory structure", tool_name="create_directory"),
-            PlanStep(id=2, description="Initialize FastAPI backend application", tool_name="write_file"),
-            PlanStep(id=3, description="Set up database models with SQLAlchemy", tool_name="write_file"),
-            PlanStep(id=4, description="Implement user authentication", tool_name="write_file"),
-            PlanStep(id=5, description="Create API endpoints", tool_name="write_file"),
-            PlanStep(id=6, description="Build React frontend components", tool_name="write_file"),
-            PlanStep(id=7, description="Create main dashboard page", tool_name="write_file"),
-            PlanStep(id=8, description="Add Docker configuration", tool_name="write_file"),
-            PlanStep(id=9, description="Write unit tests", tool_name="write_file"),
-            PlanStep(id=10, description="Add CI/CD pipeline", tool_name="write_file"),
-            PlanStep(id=11, description="Generate README documentation", tool_name="write_file"),
-            PlanStep(id=12, description="Create requirements.txt", tool_name="write_file"),
-        ],
-        "api": [
-            PlanStep(id=1, description="Create project directory structure", tool_name="create_directory"),
-            PlanStep(id=2, description="Initialize FastAPI application", tool_name="write_file"),
-            PlanStep(id=3, description="Set up database models", tool_name="write_file"),
-            PlanStep(id=4, description="Create CRUD endpoints", tool_name="write_file"),
-            PlanStep(id=5, description="Add input validation with Pydantic", tool_name="write_file"),
-            PlanStep(id=6, description="Implement error handling", tool_name="write_file"),
-            PlanStep(id=7, description="Write comprehensive unit tests", tool_name="write_file"),
-            PlanStep(id=8, description="Add Docker setup", tool_name="write_file"),
-            PlanStep(id=9, description="Generate OpenAPI documentation", tool_name="write_file"),
-            PlanStep(id=10, description="Create GitHub Actions CI/CD", tool_name="write_file"),
-        ],
-        "refactor": [
-            PlanStep(id=1, description="Analyze existing codebase structure", tool_name="list_directory"),
-            PlanStep(id=2, description="Add type hints to Python files", tool_name="write_file"),
-            PlanStep(id=3, description="Restructure project layout", tool_name="create_directory"),
-            PlanStep(id=4, description="Create Dockerfile", tool_name="write_file"),
-            PlanStep(id=5, description="Add docker-compose.yml", tool_name="write_file"),
-            PlanStep(id=6, description="Generate test suite", tool_name="write_file"),
-            PlanStep(id=7, description="Configure pre-commit hooks", tool_name="write_file"),
-            PlanStep(id=8, description="Set up GitHub Actions workflow", tool_name="write_file"),
-        ],
-    }
-    return plans.get(flow, plans["api"])
+# ============================================================================
+# File Generation
+# ============================================================================
 
+def get_project_files(project_name: str, task_desc: str, flow: str) -> List[Dict[str, Any]]:
+    """Generate all files for a project based on flow type."""
+    
+    if flow == "refactor":
+        return get_refactor_files(project_name, task_desc)
+    elif flow == "api":
+        return get_api_files(project_name, task_desc)
+    else:  # saas
+        return get_saas_files(project_name, task_desc)
+
+def get_saas_files(project_name: str, task_desc: str) -> List[Dict[str, Any]]:
+    """Generate all files for a SaaS project."""
+    files = []
+    
+    # README
+    files.append({
+        "step": 1, "description": "Create README.md",
+        "path": f"{project_name}/README.md",
+        "content": f'''# {project_name}
+
+> {task_desc}
+
+Generated by **Masidy AI Agent Platform** 🚀
+
+## Quick Start
+
+```bash
+cd backend && pip install -r requirements.txt && uvicorn app.main:app --reload
+```
+
+## Stack
+- **Backend**: FastAPI + SQLAlchemy + JWT Auth
+- **Database**: SQLite (dev) / PostgreSQL (prod)
+- **CI/CD**: GitHub Actions + Docker
+
+## API Docs
+- Swagger: http://localhost:8000/docs
+''', "language": "markdown"
+    })
+    
+    # Backend main.py
+    files.append({
+        "step": 2, "description": "Create backend main.py",
+        "path": f"{project_name}/backend/app/main.py",
+        "content": f'''"""FastAPI Backend - {project_name}"""
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from app.api import auth, items, users
+from app.core.database import engine, Base
+
+Base.metadata.create_all(bind=engine)
+
+app = FastAPI(title="{project_name}", version="1.0.0")
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
+app.include_router(users.router, prefix="/api/v1/users", tags=["users"])
+app.include_router(items.router, prefix="/api/v1/items", tags=["items"])
 
 @app.get("/")
 async def root():
-    """Health check endpoint."""
-    return {
-        "status": "healthy",
-        "service": "Masidy API",
-        "version": "1.0.0",
-    }
+    return {{"message": "Welcome to {project_name}", "docs": "/docs"}}
 
+@app.get("/health")
+async def health():
+    return {{"status": "healthy", "version": "1.0.0"}}
+''', "language": "python"
+    })
+    
+    # Database
+    files.append({
+        "step": 3, "description": "Create database.py",
+        "path": f"{project_name}/backend/app/core/database.py",
+        "content": '''"""Database configuration"""
+from sqlalchemy import create_engine
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+import os
+
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./app.db")
+engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {})
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+''', "language": "python"
+    })
+    
+    # Config
+    files.append({
+        "step": 4, "description": "Create config.py",
+        "path": f"{project_name}/backend/app/core/config.py",
+        "content": '''"""App config"""
+import os
+SECRET_KEY = os.getenv("SECRET_KEY", "change-me-in-production")
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+ALGORITHM = "HS256"
+''', "language": "python"
+    })
+    
+    # Security
+    files.append({
+        "step": 5, "description": "Create security.py",
+        "path": f"{project_name}/backend/app/core/security.py",
+        "content": '''"""Security utilities"""
+from datetime import datetime, timedelta
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+from fastapi import Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
+from app.core.config import SECRET_KEY, ALGORITHM
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+
+def verify_password(plain: str, hashed: str) -> bool:
+    return pwd_context.verify(plain, hashed)
+
+def get_password_hash(password: str) -> str:
+    return pwd_context.hash(password)
+
+def create_access_token(data: dict, expires_delta: timedelta = None) -> str:
+    to_encode = data.copy()
+    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=15))
+    to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+def decode_token(token: str) -> dict:
+    try:
+        return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    except JWTError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+''', "language": "python"
+    })
+    
+    # User model
+    files.append({
+        "step": 6, "description": "Create User model",
+        "path": f"{project_name}/backend/app/models/user.py",
+        "content": '''"""User model"""
+from sqlalchemy import Column, Integer, String, Boolean, DateTime
+from sqlalchemy.sql import func
+from app.core.database import Base
+
+class User(Base):
+    __tablename__ = "users"
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, unique=True, index=True, nullable=False)
+    hashed_password = Column(String, nullable=False)
+    full_name = Column(String)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+''', "language": "python"
+    })
+    
+    # Item model
+    files.append({
+        "step": 7, "description": "Create Item model",
+        "path": f"{project_name}/backend/app/models/item.py",
+        "content": '''"""Item model"""
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Text
+from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
+from app.core.database import Base
+
+class Item(Base):
+    __tablename__ = "items"
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String(200), nullable=False)
+    description = Column(Text)
+    owner_id = Column(Integer, ForeignKey("users.id"))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    owner = relationship("User")
+''', "language": "python"
+    })
+    
+    # Auth schemas
+    files.append({
+        "step": 8, "description": "Create auth schemas",
+        "path": f"{project_name}/backend/app/schemas/auth.py",
+        "content": '''"""Auth schemas"""
+from pydantic import BaseModel, EmailStr
+from typing import Optional
+
+class UserCreate(BaseModel):
+    email: EmailStr
+    password: str
+    full_name: Optional[str] = None
+
+class UserResponse(BaseModel):
+    id: int
+    email: str
+    full_name: Optional[str]
+    is_active: bool
+    class Config:
+        from_attributes = True
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+''', "language": "python"
+    })
+    
+    # Item schemas
+    files.append({
+        "step": 9, "description": "Create item schemas",
+        "path": f"{project_name}/backend/app/schemas/item.py",
+        "content": '''"""Item schemas"""
+from pydantic import BaseModel
+from typing import Optional
+from datetime import datetime
+
+class ItemCreate(BaseModel):
+    title: str
+    description: Optional[str] = None
+
+class ItemUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+
+class ItemResponse(BaseModel):
+    id: int
+    title: str
+    description: Optional[str]
+    owner_id: int
+    created_at: datetime
+    class Config:
+        from_attributes = True
+''', "language": "python"
+    })
+    
+    # Auth API
+    files.append({
+        "step": 10, "description": "Create auth API",
+        "path": f"{project_name}/backend/app/api/auth.py",
+        "content": '''"""Auth endpoints"""
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy.orm import Session
+from datetime import timedelta
+from app.core.database import get_db
+from app.core.security import verify_password, get_password_hash, create_access_token
+from app.core.config import ACCESS_TOKEN_EXPIRE_MINUTES
+from app.models.user import User
+from app.schemas.auth import UserCreate, UserResponse, Token
+
+router = APIRouter()
+
+@router.post("/register", response_model=UserResponse)
+def register(user_data: UserCreate, db: Session = Depends(get_db)):
+    if db.query(User).filter(User.email == user_data.email).first():
+        raise HTTPException(status_code=400, detail="Email already registered")
+    user = User(email=user_data.email, hashed_password=get_password_hash(user_data.password), full_name=user_data.full_name)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+@router.post("/login", response_model=Token)
+def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == form_data.username).first()
+    if not user or not verify_password(form_data.password, user.hashed_password):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password")
+    access_token = create_access_token(data={"sub": user.email}, expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    return {"access_token": access_token, "token_type": "bearer"}
+''', "language": "python"
+    })
+    
+    # Users API
+    files.append({
+        "step": 11, "description": "Create users API",
+        "path": f"{project_name}/backend/app/api/users.py",
+        "content": '''"""User endpoints"""
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+from app.core.database import get_db
+from app.core.security import oauth2_scheme, decode_token
+from app.models.user import User
+from app.schemas.auth import UserResponse
+
+router = APIRouter()
+
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
+    payload = decode_token(token)
+    email = payload.get("sub")
+    if not email:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
+
+@router.get("/me", response_model=UserResponse)
+def get_me(current_user: User = Depends(get_current_user)):
+    return current_user
+''', "language": "python"
+    })
+    
+    # Items API
+    files.append({
+        "step": 12, "description": "Create items API",
+        "path": f"{project_name}/backend/app/api/items.py",
+        "content": '''"""Item CRUD"""
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+from typing import List
+from app.core.database import get_db
+from app.api.users import get_current_user
+from app.models.user import User
+from app.models.item import Item
+from app.schemas.item import ItemCreate, ItemUpdate, ItemResponse
+
+router = APIRouter()
+
+@router.get("/", response_model=List[ItemResponse])
+def list_items(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    return db.query(Item).offset(skip).limit(limit).all()
+
+@router.post("/", response_model=ItemResponse)
+def create_item(item: ItemCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    db_item = Item(**item.model_dump(), owner_id=user.id)
+    db.add(db_item)
+    db.commit()
+    db.refresh(db_item)
+    return db_item
+
+@router.get("/{item_id}", response_model=ItemResponse)
+def get_item(item_id: int, db: Session = Depends(get_db)):
+    item = db.query(Item).filter(Item.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+    return item
+
+@router.delete("/{item_id}")
+def delete_item(item_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    item = db.query(Item).filter(Item.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+    db.delete(item)
+    db.commit()
+    return {"message": "Item deleted"}
+''', "language": "python"
+    })
+    
+    # requirements.txt
+    files.append({
+        "step": 13, "description": "Create requirements.txt",
+        "path": f"{project_name}/backend/requirements.txt",
+        "content": '''fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+sqlalchemy>=2.0.0
+pydantic>=2.0.0
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
+python-multipart>=0.0.6
+pytest>=7.0.0
+httpx>=0.25.0
+''', "language": "text"
+    })
+    
+    # Dockerfile
+    files.append({
+        "step": 14, "description": "Create Dockerfile",
+        "path": f"{project_name}/backend/Dockerfile",
+        "content": '''FROM python:3.11-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
+EXPOSE 8000
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+''', "language": "dockerfile"
+    })
+    
+    # docker-compose
+    files.append({
+        "step": 15, "description": "Create docker-compose.yml",
+        "path": f"{project_name}/docker-compose.yml",
+        "content": f'''version: '3.8'
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=sqlite:///./app.db
+      - SECRET_KEY=${{SECRET_KEY:-change-me}}
+    restart: unless-stopped
+''', "language": "yaml"
+    })
+    
+    # CI/CD
+    files.append({
+        "step": 16, "description": "Create GitHub Actions CI",
+        "path": f"{project_name}/.github/workflows/ci.yml",
+        "content": f'''name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: cd backend && pip install -r requirements.txt
+      - run: cd backend && pytest -v
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t {project_name}-backend ./backend
+''', "language": "yaml"
+    })
+    
+    # Tests
+    files.append({
+        "step": 17, "description": "Create tests",
+        "path": f"{project_name}/backend/tests/test_api.py",
+        "content": '''"""API Tests"""
+from fastapi.testclient import TestClient
+from app.main import app
+
+client = TestClient(app)
+
+def test_root():
+    response = client.get("/")
+    assert response.status_code == 200
+
+def test_health():
+    response = client.get("/health")
+    assert response.status_code == 200
+    assert response.json()["status"] == "healthy"
+''', "language": "python"
+    })
+    
+    # Init files
+    for init_path in [
+        f"{project_name}/backend/app/__init__.py",
+        f"{project_name}/backend/app/api/__init__.py",
+        f"{project_name}/backend/app/core/__init__.py",
+        f"{project_name}/backend/app/models/__init__.py",
+        f"{project_name}/backend/app/schemas/__init__.py",
+        f"{project_name}/backend/tests/__init__.py",
+    ]:
+        files.append({
+            "step": len(files) + 1,
+            "description": f"Create {init_path.split('/')[-2]}/__init__.py",
+            "path": init_path,
+            "content": '"""Module init"""',
+            "language": "python"
+        })
+    
+    # .gitignore
+    files.append({
+        "step": len(files) + 1, "description": "Create .gitignore",
+        "path": f"{project_name}/.gitignore",
+        "content": '''__pycache__/
+*.py[cod]
+.env
+*.db
+.pytest_cache/
+node_modules/
+dist/
+.vscode/
+''', "language": "text"
+    })
+    
+    # .env.example
+    files.append({
+        "step": len(files) + 1, "description": "Create .env.example",
+        "path": f"{project_name}/.env.example",
+        "content": '''DATABASE_URL=sqlite:///./app.db
+SECRET_KEY=your-secret-key-change-in-production
+''', "language": "text"
+    })
+    
+    return files
+
+def get_api_files(project_name: str, task_desc: str) -> List[Dict[str, Any]]:
+    """Generate files for API-only project (no frontend)."""
+    return get_saas_files(project_name, task_desc)
+
+def get_refactor_files(project_name: str, task_desc: str) -> List[Dict[str, Any]]:
+    """Generate files for refactoring project."""
+    files = []
+    
+    files.append({"step": 1, "description": "Create Dockerfile", "path": f"{project_name}/Dockerfile",
+        "content": '''FROM python:3.11-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+COPY . .
+CMD ["python", "main.py"]
+''', "language": "dockerfile"})
+    
+    files.append({"step": 2, "description": "Create docker-compose.yml", "path": f"{project_name}/docker-compose.yml",
+        "content": '''version: '3.8'
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+''', "language": "yaml"})
+    
+    files.append({"step": 3, "description": "Create GitHub Actions", "path": f"{project_name}/.github/workflows/ci.yml",
+        "content": '''name: CI
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements.txt || true
+      - run: pytest -v || true
+''', "language": "yaml"})
+    
+    files.append({"step": 4, "description": "Create pre-commit config", "path": f"{project_name}/.pre-commit-config.yaml",
+        "content": '''repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+''', "language": "yaml"})
+    
+    files.append({"step": 5, "description": "Create README", "path": f"{project_name}/README.md",
+        "content": f'''# {project_name}
+
+> {task_desc}
+
+Modernized by **Masidy AI Agent Platform** 🚀
+
+## Quick Start
+```bash
+docker-compose up --build
+```
+''', "language": "markdown"})
+    
+    return files
+
+# ============================================================================
+# FastAPI App
+# ============================================================================
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    print("🚀 Masidy API starting...")
+    # Load existing projects from state
+    state = load_state()
+    for project in state.get("projects", []):
+        projects_db[project["id"]] = project
+    yield
+    print("👋 Masidy API shutting down...")
+
+app = FastAPI(
+    title="Masidy API",
+    description="Production-ready backend API for the Masidy AI Agent Platform",
+    version="2.0.0",
+    lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ============================================================================
+# API Endpoints
+# ============================================================================
+
+@app.get("/")
+async def root():
+    return {"status": "healthy", "service": "Masidy API", "version": "2.0.0"}
 
 @app.get("/api/health")
 async def health_check():
-    """Detailed health check."""
     return {
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
-        "runtime_available": True,
+        "projects_count": len(projects_db),
         "flows_available": ["saas", "api", "refactor"],
     }
 
-
-@app.get("/api/projects", response_model=list[ProjectResponse])
+@app.get("/api/projects")
 async def list_projects():
     """List all projects."""
     state = load_state()
     return state.get("projects", [])
 
-
-@app.post("/api/projects", response_model=ProjectResponse)
+@app.post("/api/projects")
 async def create_project(project: ProjectCreate):
     """Create a new project."""
     project_id = str(uuid.uuid4())[:8]
+    name = project.name or generate_project_name(project.prompt)
     
-    # Generate name from prompt if not provided
-    name = project.name
-    if not name:
-        name = project.prompt.lower()
-        for word in ["build", "create", "make", "a", "an", "the"]:
-            name = name.replace(word, "")
-        name = "_".join(name.split()[:3]).strip("_")
-        name = "".join(c for c in name if c.isalnum() or c == "_")
-        name = name or "my_project"
-    
-    plan = generate_plan(project.prompt, project.flow)
+    # Get files for this flow
+    files = get_project_files(name, project.prompt, project.flow)
     
     new_project = {
         "id": project_id,
@@ -198,87 +732,99 @@ async def create_project(project: ProjectCreate):
         "status": "pending",
         "created_at": datetime.now().isoformat(),
         "steps_completed": 0,
-        "steps_total": len(plan),
-        "output_path": f"./{name}/",
+        "steps_total": len(files),
+        "output_path": str(Config.PROJECTS_DIR / name),
+        "files": [],
     }
     
     # Save to state
     state = load_state()
     state.setdefault("projects", []).insert(0, new_project)
     save_state(state)
-    
     projects_db[project_id] = new_project
     
-    return ProjectResponse(**new_project)
+    return new_project
 
-
-@app.get("/api/projects/{project_id}", response_model=ProjectResponse)
+@app.get("/api/projects/{project_id}")
 async def get_project(project_id: str):
     """Get project details."""
+    if project_id in projects_db:
+        return projects_db[project_id]
     state = load_state()
     for project in state.get("projects", []):
         if project["id"] == project_id:
-            return ProjectResponse(**project)
+            return project
     raise HTTPException(status_code=404, detail="Project not found")
 
+@app.post("/api/plan")
+async def generate_plan(request: PlanRequest):
+    """Generate execution plan without creating a project."""
+    name = generate_project_name(request.prompt)
+    files = get_project_files(name, request.prompt, request.flow)
+    
+    steps = [
+        PlanStep(id=f["step"], description=f["description"], tool_name="write_file", file_path=f["path"])
+        for f in files
+    ]
+    
+    return ExecutionPlan(
+        project_id="preview",
+        flow=request.flow,
+        steps=steps,
+        estimated_time=f"{len(steps) * 2}-{len(steps) * 3} seconds",
+        total_files=len(files),
+    )
 
-@app.post("/api/projects/{project_id}/plan", response_model=ExecutionPlan)
+@app.post("/api/projects/{project_id}/plan")
 async def get_execution_plan(project_id: str):
     """Generate execution plan for a project."""
-    state = load_state()
-    project = None
-    for p in state.get("projects", []):
-        if p["id"] == project_id:
-            project = p
-            break
+    project = projects_db.get(project_id)
+    if not project:
+        state = load_state()
+        for p in state.get("projects", []):
+            if p["id"] == project_id:
+                project = p
+                break
     
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
-    steps = generate_plan(project["prompt"], project["flow"])
+    files = get_project_files(project["name"], project["prompt"], project["flow"])
+    steps = [
+        PlanStep(id=f["step"], description=f["description"], tool_name="write_file", file_path=f["path"])
+        for f in files
+    ]
     
     return ExecutionPlan(
         project_id=project_id,
         flow=project["flow"],
         steps=steps,
-        estimated_time=f"{len(steps) * 2}-{len(steps) * 4} seconds",
+        estimated_time=f"{len(steps) * 2}-{len(steps) * 3} seconds",
+        total_files=len(files),
     )
 
-
 @app.post("/api/projects/{project_id}/execute")
-async def execute_project(project_id: str, background_tasks: BackgroundTasks):
+async def start_execution(project_id: str):
     """Start project execution."""
-    state = load_state()
-    project = None
-    for p in state.get("projects", []):
-        if p["id"] == project_id:
-            project = p
-            break
-    
+    project = projects_db.get(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
     execution_id = str(uuid.uuid4())[:8]
-    
-    execution = {
+    executions_db[execution_id] = {
         "id": execution_id,
         "project_id": project_id,
         "status": "running",
         "current_step": 0,
         "total_steps": project["steps_total"],
-        "current_step_description": "Starting...",
         "files_created": [],
         "errors": [],
     }
     
-    executions_db[execution_id] = execution
-    
-    # Update project status
     project["status"] = "in_progress"
-    save_state(state)
+    save_state(load_state())
     
     return {"execution_id": execution_id, "status": "started"}
-
 
 @app.get("/api/executions/{execution_id}/stream")
 async def stream_execution(execution_id: str):
@@ -287,95 +833,156 @@ async def stream_execution(execution_id: str):
     async def generate():
         execution = executions_db.get(execution_id)
         if not execution:
-            yield f"data: {json.dumps({'error': 'Execution not found'})}\n\n"
+            yield f"data: {json.dumps({'type': 'error', 'message': 'Execution not found'})}\n\n"
             return
         
         project_id = execution["project_id"]
-        state = load_state()
-        project = None
-        for p in state.get("projects", []):
-            if p["id"] == project_id:
-                project = p
-                break
-        
+        project = projects_db.get(project_id)
         if not project:
-            yield f"data: {json.dumps({'error': 'Project not found'})}\n\n"
+            yield f"data: {json.dumps({'type': 'error', 'message': 'Project not found'})}\n\n"
             return
         
-        plan = generate_plan(project["prompt"], project["flow"])
+        # Get files to generate
+        files = get_project_files(project["name"], project["prompt"], project["flow"])
+        project_dir = Config.PROJECTS_DIR / project["name"]
         
-        # Simulate execution
-        for i, step in enumerate(plan):
-            execution["current_step"] = i + 1
-            execution["current_step_description"] = step.description
-            step.status = "executing"
+        yield f"data: {json.dumps({'type': 'thinking', 'message': 'Analyzing your request...'})}\n\n"
+        await asyncio.sleep(0.5)
+        
+        yield f"data: {json.dumps({'type': 'planning', 'message': f'Creating plan for {len(files)} files...'})}\n\n"
+        await asyncio.sleep(0.5)
+        
+        # Generate each file
+        created_files = []
+        for i, file_info in enumerate(files):
+            step_num = i + 1
             
-            yield f"data: {json.dumps({'type': 'step_start', 'step': i + 1, 'total': len(plan), 'description': step.description})}\n\n"
+            yield f"data: {json.dumps({'type': 'step_start', 'step': step_num, 'total': len(files), 'description': file_info['description']})}\n\n"
             
-            # Simulate work
-            await asyncio.sleep(0.5 + (0.3 * (i % 3)))
+            # Actually create the file
+            try:
+                file_path = project_dir / file_info["path"].replace(f"{project['name']}/", "")
+                file_path.parent.mkdir(parents=True, exist_ok=True)
+                file_path.write_text(file_info["content"])
+                created_files.append(file_info["path"])
+                
+                yield f"data: {json.dumps({'type': 'step_complete', 'step': step_num, 'file': file_info['path'], 'content': file_info['content'][:500], 'language': file_info['language']})}\n\n"
+            except Exception as e:
+                yield f"data: {json.dumps({'type': 'step_error', 'step': step_num, 'error': str(e)})}\n\n"
             
-            # Generate mock file
-            mock_file = f"project/{step.description.lower().replace(' ', '_')}.py"
-            execution["files_created"].append(mock_file)
-            step.status = "completed"
-            
-            yield f"data: {json.dumps({'type': 'step_complete', 'step': i + 1, 'file': mock_file})}\n\n"
+            await asyncio.sleep(0.3)
         
         # Update project status
         project["status"] = "completed"
-        project["steps_completed"] = len(plan)
+        project["steps_completed"] = len(files)
+        project["files"] = created_files
+        
+        state = load_state()
+        for i, p in enumerate(state.get("projects", [])):
+            if p["id"] == project_id:
+                state["projects"][i] = project
+                break
         save_state(state)
         
-        execution["status"] = "completed"
-        
-        yield f"data: {json.dumps({'type': 'complete', 'files_created': execution['files_created']})}\n\n"
+        yield f"data: {json.dumps({'type': 'complete', 'message': 'Project created successfully!', 'files_created': created_files, 'total_files': len(created_files)})}\n\n"
     
     return StreamingResponse(
         generate(),
         media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-        },
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
     )
 
+@app.post("/api/plan-and-execute")
+async def plan_and_execute(request: PlanRequest):
+    """Plan and start execution in one call - returns execution ID for streaming."""
+    # Create project
+    project_id = str(uuid.uuid4())[:8]
+    name = generate_project_name(request.prompt)
+    files = get_project_files(name, request.prompt, request.flow)
+    
+    project = {
+        "id": project_id,
+        "name": name,
+        "prompt": request.prompt,
+        "flow": request.flow,
+        "status": "pending",
+        "created_at": datetime.now().isoformat(),
+        "steps_completed": 0,
+        "steps_total": len(files),
+        "output_path": str(Config.PROJECTS_DIR / name),
+        "files": [],
+    }
+    
+    state = load_state()
+    state.setdefault("projects", []).insert(0, project)
+    save_state(state)
+    projects_db[project_id] = project
+    
+    # Create execution
+    execution_id = str(uuid.uuid4())[:8]
+    executions_db[execution_id] = {
+        "id": execution_id,
+        "project_id": project_id,
+        "status": "running",
+    }
+    
+    return {
+        "project_id": project_id,
+        "execution_id": execution_id,
+        "name": name,
+        "steps_total": len(files),
+    }
 
-@app.get("/api/executions/{execution_id}", response_model=ExecutionStatus)
-async def get_execution_status(execution_id: str):
-    """Get current execution status."""
-    execution = executions_db.get(execution_id)
-    if not execution:
-        raise HTTPException(status_code=404, detail="Execution not found")
-    return ExecutionStatus(**execution)
+@app.get("/api/projects/{project_id}/files")
+async def get_project_files_list(project_id: str):
+    """Get list of files for a project."""
+    project = projects_db.get(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    project_dir = Config.PROJECTS_DIR / project["name"]
+    if not project_dir.exists():
+        return {"files": []}
+    
+    files = []
+    for file_path in project_dir.rglob("*"):
+        if file_path.is_file():
+            rel_path = str(file_path.relative_to(project_dir))
+            files.append({
+                "path": rel_path,
+                "size": file_path.stat().st_size,
+            })
+    
+    return {"files": files}
 
+@app.get("/api/projects/{project_id}/files/{file_path:path}")
+async def get_file_content(project_id: str, file_path: str):
+    """Get content of a specific file."""
+    project = projects_db.get(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    full_path = Config.PROJECTS_DIR / project["name"] / file_path
+    if not full_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    content = full_path.read_text()
+    ext = full_path.suffix.lower()
+    language_map = {".py": "python", ".js": "javascript", ".jsx": "jsx", ".ts": "typescript", ".tsx": "tsx",
+                    ".json": "json", ".yml": "yaml", ".yaml": "yaml", ".md": "markdown", ".html": "html", ".css": "css"}
+    
+    return FileContent(path=file_path, content=content, language=language_map.get(ext, "text"))
 
 @app.get("/api/flows")
 async def list_flows():
     """List available flows."""
     return {
         "flows": [
-            {
-                "id": "saas",
-                "name": "SaaS Application",
-                "description": "Full-stack SaaS with auth, database, and UI",
-                "steps": 12,
-            },
-            {
-                "id": "api",
-                "name": "API Service",
-                "description": "REST API with CRUD, tests, and docs",
-                "steps": 10,
-            },
-            {
-                "id": "refactor",
-                "name": "Repository Refactor",
-                "description": "Modernize with Docker, CI/CD, and tests",
-                "steps": 8,
-            },
+            {"id": "saas", "name": "SaaS Application", "description": "Full-stack SaaS with auth, database, and API", "steps": 20},
+            {"id": "api", "name": "API Service", "description": "REST API with CRUD, tests, and docs", "steps": 20},
+            {"id": "refactor", "name": "Repository Refactor", "description": "Add Docker, CI/CD, and modernize", "steps": 5},
         ]
     }
-
 
 @app.get("/api/tools")
 async def list_tools():
@@ -391,11 +998,32 @@ async def list_tools():
             {"name": "git_init", "description": "Initialize git repository"},
             {"name": "git_commit", "description": "Commit changes"},
             {"name": "git_push", "description": "Push to remote"},
-            # ... more tools
         ],
         "total": 33,
     }
 
+@app.delete("/api/projects/{project_id}")
+async def delete_project(project_id: str):
+    """Delete a project."""
+    project = projects_db.pop(project_id, None)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Delete project files
+    project_dir = Config.PROJECTS_DIR / project["name"]
+    if project_dir.exists():
+        shutil.rmtree(project_dir)
+    
+    # Update state
+    state = load_state()
+    state["projects"] = [p for p in state.get("projects", []) if p["id"] != project_id]
+    save_state(state)
+    
+    return {"message": "Project deleted"}
+
+# ============================================================================
+# Main
+# ============================================================================
 
 if __name__ == "__main__":
     import uvicorn

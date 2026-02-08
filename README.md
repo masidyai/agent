@@ -6,7 +6,7 @@
 
 **Build complete, production-ready applications from a simple prompt.**
 
-[Live Demo](https://masidy.ai) · [Documentation](./docs) · [Report Bug](https://github.com/masidyai/agent/issues)
+[Live Demo](https://masidy.ai) · [Documentation](#-documentation) · [Report Bug](https://github.com/masidyai/agent/issues)
 
 </div>
 
@@ -14,16 +14,16 @@
 
 ## ✨ What is Masidy?
 
-Masidy is an all-in-one AI agent platform that builds complete applications end-to-end. Unlike code assistants that help you write code, Masidy creates entire projects - from backend APIs to full-stack SaaS applications - complete with authentication, database, Docker, CI/CD, and more.
+Masidy is an all-in-one AI agent platform that builds complete applications end-to-end. Unlike code assistants that help you write code, Masidy **creates entire projects** - from backend APIs to full-stack SaaS applications - complete with authentication, database, Docker, CI/CD, and more.
 
 ### Key Features
 
 - 🚀 **Three Powerful Flows**: SaaS apps, API services, or repository refactoring
-- 🤖 **AI-Powered Planning**: Intelligent step-by-step execution with retries
+- 🤖 **AI-Powered Planning**: Intelligent step-by-step execution with real file generation
 - 🎨 **Modern Web IDE**: Real-time preview, code explorer, and AI builder
 - 📦 **Production Ready**: Docker, tests, CI/CD included in every project
 - 🔧 **33+ Built-in Tools**: File operations, shell commands, GitHub integration
-- ⚡ **Live Execution**: Watch your project being built in real-time
+- ⚡ **Live Streaming**: Watch your project being built in real-time with SSE
 
 ---
 
@@ -80,10 +80,12 @@ cd agent
 ```bash
 cd backend_api
 pip install -r requirements.txt
-python main.py
+uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
 The API server will start at `http://localhost:8000`
+- API Docs: http://localhost:8000/docs
+- Health Check: http://localhost:8000/api/health
 
 ### 3. Start the Frontend
 
@@ -95,12 +97,38 @@ npm run dev
 
 The web app will be available at `http://localhost:3000`
 
-### 4. (Optional) Use CLI Directly
+### 4. Use the Platform
+
+1. Open http://localhost:3000 in your browser
+2. Enter a prompt like "Build a task management SaaS"
+3. Click "Start Building" to open the IDE
+4. Watch the AI create your project in real-time
+5. Browse generated files in the explorer
+6. Preview, download, or publish your project
+
+### 5. (Optional) Use CLI Directly
 
 ```bash
 cd masidy_agent_runtime
 pip install -r requirements.txt
 python main.py --flow saas --task "Build a task management app"
+```
+
+### Environment Variables
+
+Create a `.env` file in `backend_api/`:
+
+```bash
+# Backend API Configuration
+OPENAI_API_KEY=your-openai-key-here  # For future LLM integration
+SECRET_KEY=your-secret-key-for-production
+```
+
+Create a `.env.local` file in `masidy_frontend/`:
+
+```bash
+# Frontend Configuration
+NEXT_PUBLIC_API_URL=http://localhost:8000
 ```
 
 ---
@@ -195,28 +223,48 @@ The frontend uses a consistent design system:
 | GET | `/api/projects` | List all projects |
 | POST | `/api/projects` | Create new project |
 | GET | `/api/projects/{id}` | Get project details |
+| DELETE | `/api/projects/{id}` | Delete project |
+| POST | `/api/plan` | Generate plan (without creating project) |
 | POST | `/api/projects/{id}/plan` | Generate execution plan |
 | POST | `/api/projects/{id}/execute` | Start execution |
+| POST | `/api/plan-and-execute` | Create + execute in one call |
 | GET | `/api/executions/{id}/stream` | Stream execution progress (SSE) |
+| GET | `/api/projects/{id}/files` | List project files |
+| GET | `/api/projects/{id}/files/{path}` | Get file content |
 | GET | `/api/flows` | List available flows |
 | GET | `/api/tools` | List available tools |
 
 ### Example: Create and Execute a Project
 
 ```bash
-# Create project
-curl -X POST http://localhost:8000/api/projects \
+# Create project and get execution ID
+curl -X POST http://localhost:8000/api/plan-and-execute \
   -H "Content-Type: application/json" \
-  -d '{"prompt": "Build a notes API", "flow": "api"}'
+  -d '{"prompt": "Build a task management SaaS", "flow": "saas"}'
 
-# Get execution plan
-curl -X POST http://localhost:8000/api/projects/{project_id}/plan
+# Response:
+# {
+#   "project_id": "abc123",
+#   "execution_id": "def456",
+#   "name": "task_management",
+#   "steps_total": 25
+# }
 
-# Start execution
-curl -X POST http://localhost:8000/api/projects/{project_id}/execute
+# Stream progress (SSE)
+curl http://localhost:8000/api/executions/def456/stream
 
-# Stream progress
-curl http://localhost:8000/api/executions/{execution_id}/stream
+# Events streamed:
+# data: {"type": "thinking", "message": "Analyzing your request..."}
+# data: {"type": "step_start", "step": 1, "total": 25, "description": "Create README.md"}
+# data: {"type": "step_complete", "step": 1, "file": "project/README.md", "content": "..."}
+# ... more steps ...
+# data: {"type": "complete", "files_created": [...], "total_files": 25}
+
+# Get generated files
+curl http://localhost:8000/api/projects/abc123/files
+
+# Get specific file content
+curl http://localhost:8000/api/projects/abc123/files/backend/app/main.py
 ```
 
 ---

@@ -55,17 +55,24 @@ function IDEContent() {
     }
   }
 
-  const handleFileCreated = useCallback((path: string, content: string) => {
+  const [currentProjectId, setCurrentProjectId] = useState<string | null>(null)
+  const [selectedLanguage, setSelectedLanguage] = useState<string>('text')
+
+  const handleFileCreated = useCallback((path: string, content: string, language?: string) => {
+    if (language) {
+      setSelectedLanguage(language)
+    }
+    
     setFiles((prev) => {
       const parts = path.split('/')
-      const newFiles = [...prev]
+      const newFiles = JSON.parse(JSON.stringify(prev)) // Deep clone
       
       let current = newFiles
       for (let i = 0; i < parts.length; i++) {
         const part = parts[i]
         const isFile = i === parts.length - 1
         
-        const existingIndex = current.findIndex((f) => f.name === part)
+        const existingIndex = current.findIndex((f: FileNode) => f.name === part)
         
         if (existingIndex >= 0) {
           if (isFile) {
@@ -89,6 +96,11 @@ function IDEContent() {
       
       return newFiles
     })
+  }, [])
+
+  const handleProjectCreated = useCallback((projectId: string, name: string) => {
+    setCurrentProjectId(projectId)
+    setProjectName(name)
   }, [])
 
   const handleExecutionStart = () => {
@@ -152,6 +164,7 @@ function IDEContent() {
               onExecutionStart={handleExecutionStart}
               onExecutionComplete={handleExecutionComplete}
               onFileCreated={handleFileCreated}
+              onProjectCreated={handleProjectCreated}
             />
           </div>
 
