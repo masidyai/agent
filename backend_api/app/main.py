@@ -98,7 +98,8 @@ async def general_exception_handler(request: Request, exc: Exception) -> JSONRes
     )
 
 
-# Include API router
+# Include API router (both /api and /api/v1 for compatibility)
+app.include_router(api_router, prefix="/api")
 app.include_router(api_router, prefix="/api/v1")
 
 
