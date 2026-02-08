@@ -5,13 +5,13 @@ import React from 'react'
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label?: string
   error?: string
-  size?: 'md' | 'lg'
+  inputSize?: 'md' | 'lg'
 }
 
 export function Input({
   label,
   error,
-  size = 'md',
+  inputSize = 'md',
   className = '',
   ...props
 }: InputProps) {
@@ -28,7 +28,7 @@ export function Input({
         </label>
       )}
       <input
-        className={`${sizeClasses[size]} ${error ? 'border-red-500 focus:ring-red-500' : ''} ${className}`}
+        className={`${sizeClasses[inputSize]} ${error ? 'border-red-500 focus:ring-red-500' : ''} ${className}`}
         {...props}
       />
       {error && (
