@@ -8,16 +8,19 @@ services:
     build:
       context: .
       target: backend
+      args:
+        - SECRET_KEY=${SECRET_KEY:-change-this-in-production}
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=sqlite+aiosqlite:///./masidy.db
-      - SECRET_KEY=${SECRET_KEY:-your-secret-key-change-in-production}
-      - CORS_ORIGINS=http://localhost:3000,http://localhost:8000
+      - DATABASE_URL=sqlite+aiosqlite:///./data/masidy.db
+      - SECRET_KEY=${SECRET_KEY:-change-this-in-production}
+      - CORS_ORIGINS=http://localhost:3000,http://frontend:3000
       - DEBUG=false
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
     volumes:
       - backend_data:/app/backend_api/data
-      - ./backend_api/projects:/app/backend_api/projects
+      - projects_data:/app/backend_api/projects
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -36,7 +39,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
     depends_on:
       backend:
         condition: service_healthy
@@ -84,6 +87,7 @@ services:
 
 volumes:
   backend_data:
+  projects_data:
   postgres_data:
   redis_data:
 
