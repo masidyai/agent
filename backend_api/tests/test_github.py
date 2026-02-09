@@ -83,10 +83,37 @@ class TestGitHubAPI:
     """Test GitHub API endpoints"""
     
     @pytest.mark.asyncio
-    async def test_github_oauth_start(self, client: AsyncClient):
-        """Test GitHub OAuth flow start"""
-        # This will fail without GITHUB_CLIENT_ID set, but we can test the endpoint exists
-        response = await client.get("/api/auth/github")
-        # Should get either URL or error about missing client ID
-        assert response.status_code in [200, 500]
+    async def test_github_oauth_url_generation(self):
+        """Test GitHub OAuth URL generation with valid config"""
+        from app.services.github import GitHubService
+        from app.core import config
+        
+        # Temporarily set client ID in settings
+        original_id = config.settings.GITHUB_CLIENT_ID
+        config.settings.GITHUB_CLIENT_ID = "test_client_id"
+        
+        try:
+            oauth_url = GitHubService.get_oauth_url(state="test123")
+            assert "github.com/login/oauth/authorize" in oauth_url
+            assert "test_client_id" in oauth_url
+            assert "state=test123" in oauth_url
+        finally:
+            config.settings.GITHUB_CLIENT_ID = original_id
+    
+    @pytest.mark.asyncio
+    async def test_github_oauth_endpoint_error_without_config(self, client: AsyncClient):
+        """Test GitHub OAuth endpoint returns error without config"""
+        from app.core import config
+        
+        # Temporarily clear client ID
+        original_id = config.settings.GITHUB_CLIENT_ID
+        config.settings.GITHUB_CLIENT_ID = None
+        
+        try:
+            response = await client.get("/api/auth/github")
+            assert response.status_code == 500
+            data = response.json()
+            assert "detail" in data
+        finally:
+            config.settings.GITHUB_CLIENT_ID = original_id
 

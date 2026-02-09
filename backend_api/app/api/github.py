@@ -202,6 +202,7 @@ async def push_project_to_github(
         
         # Check if repo already exists for this project
         repo = None
+        is_new_repo = False
         if project.github_repo_name:
             try:
                 repo = github_service.get_repository(project.github_repo_name)
@@ -217,6 +218,7 @@ async def push_project_to_github(
                 private=request.private,
                 auto_init=False,  # We'll push files manually
             )
+            is_new_repo = True
         
         # Collect files to push
         import os
@@ -295,20 +297,21 @@ async def push_project_to_github(
                 "github_repo_url": repo.html_url,
                 "github_repo_name": repo.name,
                 "github_repo_id": repo.id,
-                "github_created_at": datetime.utcnow(),
+                "github_created_at": datetime.utcnow() if is_new_repo else project.github_created_at,
                 "github_last_sync": datetime.utcnow(),
                 "is_public": not request.private,
             }
         )
         
-        # Update user's repo count
-        await crud_user.update(
-            db,
-            db_obj=current_user,
-            obj_in={
-                "github_public_repos_count": current_user.github_public_repos_count + 1,
-            }
-        )
+        # Update user's repo count only if we created a new repository
+        if is_new_repo:
+            await crud_user.update(
+                db,
+                db_obj=current_user,
+                obj_in={
+                    "github_public_repos_count": current_user.github_public_repos_count + 1,
+                }
+            )
         
         logger.info(f"Pushed project {project.name} to GitHub: {repo.html_url}")
         

@@ -117,6 +117,8 @@ class GitHubService:
         files: Dict[str, str],
         commit_message: str = "Initial commit",
         branch: str = "main",
+        author_name: Optional[str] = None,
+        author_email: Optional[str] = None,
     ) -> str:
         """
         Push multiple files to a repository
@@ -126,6 +128,8 @@ class GitHubService:
             files: Dictionary of {file_path: file_content}
             commit_message: Commit message
             branch: Branch to push to
+            author_name: Commit author name (defaults to authenticated user)
+            author_email: Commit author email (defaults to authenticated user)
         
         Returns:
             Commit SHA
@@ -160,10 +164,16 @@ class GitHubService:
             # Create tree
             tree = repo.create_git_tree(tree_elements, base_tree)
             
+            # Get author info if not provided
+            if not author_name or not author_email:
+                user_info = self.get_user_info()
+                author_name = author_name or user_info.get("name") or user_info.get("login")
+                author_email = author_email or user_info.get("email") or f"{user_info.get('login')}@users.noreply.github.com"
+            
             # Create commit
             author = InputGitAuthor(
-                name="Masidy Agent",
-                email="agent@masidy.ai",
+                name=author_name,
+                email=author_email,
             )
             commit = repo.create_git_commit(
                 message=commit_message,
