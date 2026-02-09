@@ -42,6 +42,7 @@ async def websocket_endpoint(
     try:
         user_id = await get_user_from_token(token)
     except Exception as e:
+        logger.warning(f"Token validation failed: {e}")
         await websocket.close(code=4001, reason="Invalid token")
         return
     
@@ -62,6 +63,7 @@ async def project_websocket(
     try:
         user_id = await get_user_from_token(token)
     except Exception as e:
+        logger.warning(f"Token validation failed: {e}")
         await websocket.close(code=4001, reason="Invalid token")
         return
     
