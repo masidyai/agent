@@ -6,7 +6,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional, List, TYPE_CHECKING
 
-from sqlalchemy import String, DateTime, ForeignKey, Text, Uuid, Enum as SQLEnum
+from sqlalchemy import String, DateTime, ForeignKey, Text, Uuid, Enum as SQLEnum, Boolean, Integer
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from app.models.deployment import Deployment
     from app.models.memory import Memory
     from app.models.execution import Execution
+    from app.models.project_file import ProjectFile
     from app.models.code_execution import CodeExecution
 
 
@@ -74,6 +75,16 @@ class Project(Base):
     files_count: Mapped[str] = mapped_column(String(10), default="0")
     steps_completed: Mapped[str] = mapped_column(String(10), default="0")
     steps_total: Mapped[str] = mapped_column(String(10), default="0")
+    
+    # GitHub integration fields
+    github_repo_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    github_repo_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    github_repo_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    github_created_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    github_last_sync: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    github_topics: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON string of topics
+    is_public: Mapped[bool] = mapped_column(Boolean, default=False)
+    
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -92,6 +103,11 @@ class Project(Base):
     )
     executions: Mapped[List["Execution"]] = relationship(
         "Execution",
+        back_populates="project",
+        cascade="all, delete-orphan",
+    )
+    files: Mapped[List["ProjectFile"]] = relationship(
+        "ProjectFile",
         back_populates="project",
         cascade="all, delete-orphan",
     )
