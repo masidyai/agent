@@ -1,7 +1,8 @@
 """
 Billing API routes
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from datetime import datetime
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -258,9 +259,184 @@ async def cancel_subscription(
 
 @router.post("/webhook")
 async def stripe_webhook(
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ):
     """Handle Stripe webhooks (called by Stripe)"""
-    # Note: In production, verify webhook signature using settings.STRIPE_WEBHOOK_SECRET
-    # This is a simplified example
+    if not settings.STRIPE_WEBHOOK_SECRET:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Stripe webhook secret not configured",
+        )
+    
+    # Get the raw body and signature
+    payload = await request.body()
+    sig_header = request.headers.get("stripe-signature")
+    
+    if not sig_header:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Missing stripe-signature header",
+        )
+    
+    try:
+        import stripe
+        stripe.api_key = settings.STRIPE_API_KEY
+        
+        # Verify webhook signature
+        event = stripe.Webhook.construct_event(
+            payload, sig_header, settings.STRIPE_WEBHOOK_SECRET
+        )
+        
+    except ValueError:
+        # Invalid payload
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid payload",
+        )
+    except stripe.error.SignatureVerificationError:
+        # Invalid signature
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid signature",
+        )
+    except ImportError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Stripe library not installed",
+        )
+    
+    # Handle the event
+    event_type = event["type"]
+    data = event["data"]["object"]
+    
+    try:
+        if event_type == "checkout.session.completed":
+            # Payment successful, activate subscription
+            customer_id = data.get("customer")
+            subscription_id = data.get("subscription")
+            
+            billing = await crud_billing.get_by_stripe_customer(
+                db, stripe_customer_id=customer_id
+            )
+            if billing:
+                # Update subscription info
+                await crud_billing.update_stripe_info(
+                    db,
+                    billing=billing,
+                    stripe_customer_id=customer_id,
+                    stripe_subscription_id=subscription_id,
+                )
+                await db.commit()
+        
+        elif event_type == "customer.subscription.created":
+            # New subscription created
+            customer_id = data.get("customer")
+            subscription_id = data.get("id")
+            price_id = data["items"]["data"][0]["price"]["id"]
+            
+            billing = await crud_billing.get_by_stripe_customer(
+                db, stripe_customer_id=customer_id
+            )
+            if billing:
+                # Determine plan from price ID
+                plan = BillingPlan.FREE
+                if price_id == settings.STRIPE_PRICE_ID_PRO:
+                    plan = BillingPlan.PRO
+                elif price_id == settings.STRIPE_PRICE_ID_TEAM:
+                    plan = BillingPlan.TEAM
+                
+                # Update subscription info and plan
+                await crud_billing.update_stripe_info(
+                    db,
+                    billing=billing,
+                    stripe_customer_id=customer_id,
+                    stripe_subscription_id=subscription_id,
+                    stripe_price_id=price_id,
+                )
+                await crud_billing.update_plan(db, billing=billing, plan=plan)
+                
+                # Set billing period
+                from app.models.billing import BillingStatus
+                billing.status = BillingStatus.ACTIVE
+                billing.current_period_start = datetime.fromtimestamp(data["current_period_start"])
+                billing.current_period_end = datetime.fromtimestamp(data["current_period_end"])
+                db.add(billing)
+                await db.commit()
+        
+        elif event_type == "customer.subscription.updated":
+            # Subscription updated (plan change, renewal, etc.)
+            subscription_id = data.get("id")
+            price_id = data["items"]["data"][0]["price"]["id"]
+            
+            billing = await crud_billing.get_by_stripe_subscription(
+                db, stripe_subscription_id=subscription_id
+            )
+            if billing:
+                # Determine plan from price ID
+                plan = BillingPlan.FREE
+                if price_id == settings.STRIPE_PRICE_ID_PRO:
+                    plan = BillingPlan.PRO
+                elif price_id == settings.STRIPE_PRICE_ID_TEAM:
+                    plan = BillingPlan.TEAM
+                
+                await crud_billing.update_plan(db, billing=billing, plan=plan)
+                
+                # Update billing period and status
+                from app.models.billing import BillingStatus
+                billing.status = BillingStatus.ACTIVE
+                billing.current_period_start = datetime.fromtimestamp(data["current_period_start"])
+                billing.current_period_end = datetime.fromtimestamp(data["current_period_end"])
+                db.add(billing)
+                await db.commit()
+        
+        elif event_type == "customer.subscription.deleted":
+            # Subscription canceled
+            subscription_id = data.get("id")
+            
+            billing = await crud_billing.get_by_stripe_subscription(
+                db, stripe_subscription_id=subscription_id
+            )
+            if billing:
+                # Downgrade to free plan
+                from app.models.billing import BillingStatus
+                await crud_billing.update_plan(db, billing=billing, plan=BillingPlan.FREE)
+                billing.status = BillingStatus.CANCELED
+                billing.stripe_subscription_id = None
+                billing.stripe_price_id = None
+                db.add(billing)
+                await db.commit()
+        
+        elif event_type == "invoice.payment_failed":
+            # Payment failed
+            customer_id = data.get("customer")
+            
+            billing = await crud_billing.get_by_stripe_customer(
+                db, stripe_customer_id=customer_id
+            )
+            if billing:
+                from app.models.billing import BillingStatus
+                billing.status = BillingStatus.PAST_DUE
+                db.add(billing)
+                await db.commit()
+        
+        elif event_type == "invoice.payment_succeeded":
+            # Payment succeeded (renewal, etc.)
+            customer_id = data.get("customer")
+            
+            billing = await crud_billing.get_by_stripe_customer(
+                db, stripe_customer_id=customer_id
+            )
+            if billing:
+                from app.models.billing import BillingStatus
+                billing.status = BillingStatus.ACTIVE
+                # Reset usage counters for new billing period
+                await crud_billing.reset_usage(db, billing=billing)
+                await db.commit()
+    
+    except Exception as e:
+        # Log error but return 200 to prevent Stripe retries
+        print(f"Error processing webhook: {str(e)}")
+        return {"received": True, "error": str(e)}
+    
     return {"received": True}

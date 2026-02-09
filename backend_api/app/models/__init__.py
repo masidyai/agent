@@ -3,7 +3,7 @@ from app.models.user import User
 from app.models.team import Team
 from app.models.team_member import TeamMember, TeamRole
 from app.models.project import Project, ProjectStatus, ProjectFlow
-from app.models.billing import Billing, BillingPlan, BillingStatus
+from app.models.billing import Billing, BillingPlan, BillingStatus, UsageLog, UsageType
 from app.models.deployment import Deployment, DeploymentEnvironment, DeploymentStatus, DeploymentProvider
 from app.models.memory import Memory
 from app.models.execution import Execution, ExecutionStep, ExecutionStatus, StepStatus
@@ -16,6 +16,7 @@ __all__ = [
     "TeamMember",
     "Project",
     "Billing",
+    "UsageLog",
     "Deployment",
     "Memory",
     "Execution",
@@ -27,6 +28,7 @@ __all__ = [
     "ProjectFlow",
     "BillingPlan",
     "BillingStatus",
+    "UsageType",
     "DeploymentEnvironment",
     "DeploymentStatus",
     "DeploymentProvider",
