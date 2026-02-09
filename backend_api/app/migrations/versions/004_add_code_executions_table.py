@@ -19,6 +19,28 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # Create ENUM types if they don't exist
+    op.execute("""
+        DO $$ BEGIN
+            CREATE TYPE codeexecutionstatus AS ENUM (
+                'PENDING', 'BUILDING', 'LINTING', 'TESTING', 'RUNNING', 
+                'SUCCESS', 'FAILED', 'TIMEOUT', 'CANCELLED'
+            );
+        EXCEPTION
+            WHEN duplicate_object THEN null;
+        END $$;
+    """)
+    
+    op.execute("""
+        DO $$ BEGIN
+            CREATE TYPE codeexecutionphase AS ENUM (
+                'VALIDATION', 'BUILD', 'LINT', 'TEST', 'EXECUTION', 'CLEANUP'
+            );
+        EXCEPTION
+            WHEN duplicate_object THEN null;
+        END $$;
+    """)
+    
     # Create code_executions table
     op.create_table(
         'code_executions',
@@ -29,11 +51,13 @@ def upgrade() -> None:
         sa.Column('status', sa.Enum(
             'PENDING', 'BUILDING', 'LINTING', 'TESTING', 'RUNNING', 
             'SUCCESS', 'FAILED', 'TIMEOUT', 'CANCELLED',
-            name='codeexecutionstatus'
+            name='codeexecutionstatus',
+            create_type=False
         ), nullable=False),
         sa.Column('current_phase', sa.Enum(
             'VALIDATION', 'BUILD', 'LINT', 'TEST', 'EXECUTION', 'CLEANUP',
-            name='codeexecutionphase'
+            name='codeexecutionphase',
+            create_type=False
         ), nullable=True),
         # Build phase
         sa.Column('build_status', sa.String(length=50), nullable=True),

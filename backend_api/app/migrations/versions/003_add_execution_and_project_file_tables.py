@@ -20,6 +20,25 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Add execution and project_file tables"""
+    # Create ENUM types if they don't exist
+    # PostgreSQL doesn't support CREATE TYPE IF NOT EXISTS before version 9.1
+    # So we use a function to check and create
+    op.execute("""
+        DO $$ BEGIN
+            CREATE TYPE executionstatus AS ENUM ('PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED', 'STOPPED');
+        EXCEPTION
+            WHEN duplicate_object THEN null;
+        END $$;
+    """)
+    
+    op.execute("""
+        DO $$ BEGIN
+            CREATE TYPE stepstatus AS ENUM ('PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED', 'SKIPPED');
+        EXCEPTION
+            WHEN duplicate_object THEN null;
+        END $$;
+    """)
+    
     # Create executions table
     op.create_table(
         'executions',
@@ -27,7 +46,7 @@ def upgrade() -> None:
         sa.Column('project_id', sa.Uuid(), nullable=False),
         sa.Column('prompt', sa.Text(), nullable=True),
         sa.Column('plan', sa.Text(), nullable=True),
-        sa.Column('status', sa.Enum('PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED', 'STOPPED', name='executionstatus'), nullable=False),
+        sa.Column('status', sa.Enum('PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED', 'STOPPED', name='executionstatus', create_type=False), nullable=False),
         sa.Column('started_at', sa.DateTime(), nullable=True),
         sa.Column('completed_at', sa.DateTime(), nullable=True),
         sa.Column('created_at', sa.DateTime(), nullable=False),
@@ -63,7 +82,7 @@ def upgrade() -> None:
         sa.Column('name', sa.String(length=255), nullable=False),
         sa.Column('description', sa.Text(), nullable=True),
         sa.Column('tool_name', sa.String(length=100), nullable=True),
-        sa.Column('status', sa.Enum('PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED', 'SKIPPED', name='stepstatus'), nullable=False),
+        sa.Column('status', sa.Enum('PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED', 'SKIPPED', name='stepstatus', create_type=False), nullable=False),
         sa.Column('output', sa.Text(), nullable=True),
         sa.Column('logs', sa.Text(), nullable=True),
         sa.Column('created_at', sa.DateTime(), nullable=False),
@@ -86,3 +105,7 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_executions_project_id'), table_name='executions')
     op.drop_index(op.f('ix_executions_id'), table_name='executions')
     op.drop_table('executions')
+    
+    # Drop enums
+    op.execute('DROP TYPE IF EXISTS executionstatus')
+    op.execute('DROP TYPE IF EXISTS stepstatus')
