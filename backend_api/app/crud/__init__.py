@@ -5,6 +5,8 @@ from app.crud.project import project
 from app.crud.billing import billing, PLAN_LIMITS
 from app.crud.deployment import deployment
 from app.crud.memory import memory
+from app.crud.execution import execution, execution_step
+from app.crud.project_file import project_file
 
 __all__ = [
     "user",
@@ -14,5 +16,8 @@ __all__ = [
     "billing",
     "deployment",
     "memory",
+    "execution",
+    "execution_step",
+    "project_file",
     "PLAN_LIMITS",
 ]
