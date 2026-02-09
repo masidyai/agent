@@ -1,9 +1,10 @@
 """
 Billing API routes
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
+import logging
 
 from app.core.database import get_db
 from app.core.config import settings
@@ -22,6 +23,7 @@ from app.models.user import User
 from app.models.billing import BillingPlan
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.get("/", response_model=BillingResponse)
@@ -359,8 +361,8 @@ async def stripe_webhook(
                 # Set billing period
                 from app.models.billing import BillingStatus
                 billing.status = BillingStatus.ACTIVE
-                billing.current_period_start = datetime.fromtimestamp(data["current_period_start"])
-                billing.current_period_end = datetime.fromtimestamp(data["current_period_end"])
+                billing.current_period_start = datetime.fromtimestamp(data["current_period_start"], tz=timezone.utc)
+                billing.current_period_end = datetime.fromtimestamp(data["current_period_end"], tz=timezone.utc)
                 db.add(billing)
                 await db.commit()
         
@@ -385,8 +387,8 @@ async def stripe_webhook(
                 # Update billing period and status
                 from app.models.billing import BillingStatus
                 billing.status = BillingStatus.ACTIVE
-                billing.current_period_start = datetime.fromtimestamp(data["current_period_start"])
-                billing.current_period_end = datetime.fromtimestamp(data["current_period_end"])
+                billing.current_period_start = datetime.fromtimestamp(data["current_period_start"], tz=timezone.utc)
+                billing.current_period_end = datetime.fromtimestamp(data["current_period_end"], tz=timezone.utc)
                 db.add(billing)
                 await db.commit()
         
@@ -436,7 +438,7 @@ async def stripe_webhook(
     
     except Exception as e:
         # Log error but return 200 to prevent Stripe retries
-        print(f"Error processing webhook: {str(e)}")
+        logger.error(f"Error processing webhook: {str(e)}", exc_info=True)
         return {"received": True, "error": str(e)}
     
     return {"received": True}

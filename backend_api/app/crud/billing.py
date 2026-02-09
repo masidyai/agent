@@ -1,7 +1,7 @@
 """
 Billing CRUD operations
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List
 from uuid import UUID
 
@@ -249,7 +249,7 @@ class CRUDUsageLog:
             quantity=quantity,
             cost=cost,
             extra_data=metadata,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
         )
         db.add(log)
         await db.flush()
