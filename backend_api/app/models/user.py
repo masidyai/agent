@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime
 from typing import Optional, List, TYPE_CHECKING
 
-from sqlalchemy import String, DateTime, Boolean, Uuid
+from sqlalchemy import String, DateTime, Boolean, Uuid, Integer, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -36,6 +36,14 @@ class User(Base):
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False)
     oauth_provider: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     oauth_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    
+    # GitHub integration fields
+    github_username: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    github_token: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # Encrypted token
+    github_token_expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    github_account_linked: Mapped[bool] = mapped_column(Boolean, default=False)
+    github_public_repos_count: Mapped[int] = mapped_column(Integer, default=0)
+    
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     

@@ -7,7 +7,6 @@ from app.crud.deployment import deployment
 from app.crud.memory import memory
 from app.crud.execution import execution, execution_step
 from app.crud.project_file import project_file
-from app.crud.code_execution import code_execution
 
 __all__ = [
     "user",
@@ -20,6 +19,5 @@ __all__ = [
     "execution",
     "execution_step",
     "project_file",
-    "code_execution",
     "PLAN_LIMITS",
 ]

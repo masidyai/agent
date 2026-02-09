@@ -6,8 +6,8 @@ from app.models.project import Project, ProjectStatus, ProjectFlow
 from app.models.billing import Billing, BillingPlan, BillingStatus
 from app.models.deployment import Deployment, DeploymentEnvironment, DeploymentStatus, DeploymentProvider
 from app.models.memory import Memory
-from app.models.execution import Execution, ExecutionStatus, ExecutionStep, StepStatus
-from app.models.code_execution import CodeExecution, CodeExecutionStatus, CodeExecutionPhase
+from app.models.execution import Execution, ExecutionStep, ExecutionStatus, StepStatus
+from app.models.project_file import ProjectFile
 
 __all__ = [
     # Models
@@ -20,7 +20,7 @@ __all__ = [
     "Memory",
     "Execution",
     "ExecutionStep",
-    "CodeExecution",
+    "ProjectFile",
     # Enums
     "TeamRole",
     "ProjectStatus",
@@ -32,6 +32,4 @@ __all__ = [
     "DeploymentProvider",
     "ExecutionStatus",
     "StepStatus",
-    "CodeExecutionStatus",
-    "CodeExecutionPhase",
 ]

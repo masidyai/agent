@@ -21,10 +21,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, FileResponse
 from pydantic import BaseModel, Field
 
+# AI Code Generation
+from app.services.ai_code_generator import get_ai_generator
+from app.services.openai_service import get_openai_service
+
 # Configuration
 class Config:
     PROJECTS_DIR = Path(__file__).parent / "projects"
     STATE_FILE = Path(__file__).parent.parent / "masidy_agent_runtime" / "memory" / "state.json"
+    # Streaming configuration
+    CODE_CHUNK_SIZE = 50  # Characters per chunk for streaming code display
 
 Config.PROJECTS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -108,8 +114,47 @@ def generate_project_name(prompt: str) -> str:
 # File Generation
 # ============================================================================
 
+async def get_project_files_ai(project_name: str, task_desc: str, flow: str) -> List[Dict[str, Any]]:
+    """Generate all files for a project using AI."""
+    ai_generator = get_ai_generator()
+    
+    try:
+        if flow == "refactor":
+            return await ai_generator.generate_refactor_files(project_name, task_desc)
+        elif flow == "api":
+            return await ai_generator.generate_api_files(project_name, task_desc)
+        else:  # saas
+            return await ai_generator.generate_saas_files(project_name, task_desc)
+    except Exception as e:
+        print(f"AI generation failed: {e}. Falling back to templates.")
+        # Fallback to template-based generation
+        return get_project_files_template(project_name, task_desc, flow)
+
 def get_project_files(project_name: str, task_desc: str, flow: str) -> List[Dict[str, Any]]:
-    """Generate all files for a project based on flow type."""
+    """Generate all files for a project based on flow type. (Synchronous wrapper)"""
+    # This is a sync wrapper for backward compatibility
+    # Try to use async AI generation, fallback to templates
+    try:
+        # Check if we're in an async context
+        try:
+            asyncio.get_running_loop()
+            # We're in an async context - can't use run_until_complete
+            # Fall back to templates
+            return get_project_files_template(project_name, task_desc, flow)
+        except RuntimeError:
+            # No running loop - we can create one
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                return loop.run_until_complete(get_project_files_ai(project_name, task_desc, flow))
+            finally:
+                loop.close()
+    except Exception as e:
+        print(f"Error in AI generation: {e}")
+        return get_project_files_template(project_name, task_desc, flow)
+
+def get_project_files_template(project_name: str, task_desc: str, flow: str) -> List[Dict[str, Any]]:
+    """Template-based file generation (fallback)."""
     
     if flow == "refactor":
         return get_refactor_files(project_name, task_desc)
@@ -760,7 +805,13 @@ async def get_project(project_id: str):
 async def generate_plan(request: PlanRequest):
     """Generate execution plan without creating a project."""
     name = generate_project_name(request.prompt)
-    files = get_project_files(name, request.prompt, request.flow)
+    
+    # Use async AI generation for plan
+    try:
+        files = await get_project_files_ai(name, request.prompt, request.flow)
+    except Exception as e:
+        # Fallback to template
+        files = get_project_files_template(name, request.prompt, request.flow)
     
     steps = [
         PlanStep(id=f["step"], description=f["description"], tool_name="write_file", file_path=f["path"])
@@ -789,7 +840,12 @@ async def get_execution_plan(project_id: str):
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
-    files = get_project_files(project["name"], project["prompt"], project["flow"])
+    # Use async AI generation
+    try:
+        files = await get_project_files_ai(project["name"], project["prompt"], project["flow"])
+    except Exception as e:
+        files = get_project_files_template(project["name"], project["prompt"], project["flow"])
+    
     steps = [
         PlanStep(id=f["step"], description=f["description"], tool_name="write_file", file_path=f["path"])
         for f in files
@@ -828,7 +884,7 @@ async def start_execution(project_id: str):
 
 @app.get("/api/executions/{execution_id}/stream")
 async def stream_execution(execution_id: str):
-    """Stream execution progress via Server-Sent Events."""
+    """Stream execution progress via Server-Sent Events with real AI code generation."""
     
     async def generate():
         execution = executions_db.get(execution_id)
@@ -842,35 +898,80 @@ async def stream_execution(execution_id: str):
             yield f"data: {json.dumps({'type': 'error', 'message': 'Project not found'})}\n\n"
             return
         
-        # Get files to generate
-        files = get_project_files(project["name"], project["prompt"], project["flow"])
         project_dir = Config.PROJECTS_DIR / project["name"]
         
-        yield f"data: {json.dumps({'type': 'thinking', 'message': 'Analyzing your request...'})}\n\n"
+        yield f"data: {json.dumps({'type': 'thinking', 'message': 'Initializing AI code generation...'})}\n\n"
         await asyncio.sleep(0.5)
         
-        yield f"data: {json.dumps({'type': 'planning', 'message': f'Creating plan for {len(files)} files...'})}\n\n"
+        # Get AI generator
+        ai_generator = get_ai_generator()
+        openai_service = get_openai_service()
+        use_ai = openai_service is not None
+        
+        if use_ai:
+            yield f"data: {json.dumps({'type': 'planning', 'message': 'AI is analyzing your requirements...'})}\n\n"
+        else:
+            yield f"data: {json.dumps({'type': 'planning', 'message': 'Using template generation (no OpenAI API key)...'})}\n\n"
+        
         await asyncio.sleep(0.5)
         
-        # Generate each file
+        # Generate files using AI
+        try:
+            if use_ai:
+                files = await get_project_files_ai(project["name"], project["prompt"], project["flow"])
+            else:
+                files = get_project_files_template(project["name"], project["prompt"], project["flow"])
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'message': f'File generation failed: {str(e)}'})}\n\n"
+            return
+        
+        yield f"data: {json.dumps({'type': 'planning', 'message': f'Generated plan for {len(files)} files...'})}\n\n"
+        await asyncio.sleep(0.3)
+        
+        # Create each file with streaming if using AI
         created_files = []
         for i, file_info in enumerate(files):
             step_num = i + 1
             
             yield f"data: {json.dumps({'type': 'step_start', 'step': step_num, 'total': len(files), 'description': file_info['description']})}\n\n"
             
+            # If using AI and it's a code file, stream the generation
+            if use_ai and file_info.get('language') in ['python', 'javascript', 'typescript']:
+                # Stream code generation token by token
+                accumulated_content = ""
+                try:
+                    # For now, we already have the content from batch generation
+                    # In a future enhancement, this could stream token-by-token
+                    content_to_stream = file_info["content"]
+                    
+                    # Simulate streaming by chunking the content
+                    for chunk_start in range(0, len(content_to_stream), Config.CODE_CHUNK_SIZE):
+                        chunk = content_to_stream[chunk_start:chunk_start + Config.CODE_CHUNK_SIZE]
+                        accumulated_content += chunk
+                        yield f"data: {json.dumps({'type': 'code_chunk', 'step': step_num, 'chunk': chunk})}\n\n"
+                        await asyncio.sleep(0.02)  # Small delay for visual effect
+                    
+                    file_content = accumulated_content
+                except Exception as e:
+                    yield f"data: {json.dumps({'type': 'step_error', 'step': step_num, 'error': f'Streaming error: {str(e)}'})}\n\n"
+                    file_content = file_info["content"]
+            else:
+                file_content = file_info["content"]
+            
             # Actually create the file
             try:
                 file_path = project_dir / file_info["path"].replace(f"{project['name']}/", "")
                 file_path.parent.mkdir(parents=True, exist_ok=True)
-                file_path.write_text(file_info["content"])
+                file_path.write_text(file_content)
                 created_files.append(file_info["path"])
                 
-                yield f"data: {json.dumps({'type': 'step_complete', 'step': step_num, 'file': file_info['path'], 'content': file_info['content'][:500], 'language': file_info['language']})}\n\n"
+                # Send completion with preview
+                preview = file_content[:500] if len(file_content) > 500 else file_content
+                yield f"data: {json.dumps({'type': 'step_complete', 'step': step_num, 'file': file_info['path'], 'content': preview, 'language': file_info['language']})}\n\n"
             except Exception as e:
                 yield f"data: {json.dumps({'type': 'step_error', 'step': step_num, 'error': str(e)})}\n\n"
             
-            await asyncio.sleep(0.3)
+            await asyncio.sleep(0.1)
         
         # Update project status
         project["status"] = "completed"
@@ -884,7 +985,8 @@ async def stream_execution(execution_id: str):
                 break
         save_state(state)
         
-        yield f"data: {json.dumps({'type': 'complete', 'message': 'Project created successfully!', 'files_created': created_files, 'total_files': len(created_files)})}\n\n"
+        completion_message = "Project created successfully with AI-generated code!" if use_ai else "Project created successfully!"
+        yield f"data: {json.dumps({'type': 'complete', 'message': completion_message, 'files_created': created_files, 'total_files': len(created_files)})}\n\n"
     
     return StreamingResponse(
         generate(),
@@ -898,7 +1000,13 @@ async def plan_and_execute(request: PlanRequest):
     # Create project
     project_id = str(uuid.uuid4())[:8]
     name = generate_project_name(request.prompt)
-    files = get_project_files(name, request.prompt, request.flow)
+    
+    # Generate files using AI
+    try:
+        files = await get_project_files_ai(name, request.prompt, request.flow)
+    except Exception as e:
+        print(f"AI generation failed in plan_and_execute: {e}")
+        files = get_project_files_template(name, request.prompt, request.flow)
     
     project = {
         "id": project_id,
