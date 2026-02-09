@@ -90,8 +90,38 @@ def upgrade() -> None:
     op.create_index(op.f('ix_code_executions_project_id'), 'code_executions', ['project_id'], unique=False)
     
     # Alter the status and current_phase columns to use the ENUM types
-    op.execute("ALTER TABLE code_executions ALTER COLUMN status TYPE codeexecutionstatus USING status::codeexecutionstatus")
-    op.execute("ALTER TABLE code_executions ALTER COLUMN current_phase TYPE codeexecutionphase USING current_phase::codeexecutionphase")
+    # Handle potential case conversion for existing data
+    op.execute("""
+        ALTER TABLE code_executions 
+        ALTER COLUMN status TYPE codeexecutionstatus 
+        USING CASE 
+            WHEN UPPER(status) = 'PENDING' THEN 'pending'::codeexecutionstatus
+            WHEN UPPER(status) = 'BUILDING' THEN 'building'::codeexecutionstatus
+            WHEN UPPER(status) = 'LINTING' THEN 'linting'::codeexecutionstatus
+            WHEN UPPER(status) = 'TESTING' THEN 'testing'::codeexecutionstatus
+            WHEN UPPER(status) = 'RUNNING' THEN 'running'::codeexecutionstatus
+            WHEN UPPER(status) = 'SUCCESS' THEN 'success'::codeexecutionstatus
+            WHEN UPPER(status) = 'FAILED' THEN 'failed'::codeexecutionstatus
+            WHEN UPPER(status) = 'TIMEOUT' THEN 'timeout'::codeexecutionstatus
+            WHEN UPPER(status) = 'CANCELLED' THEN 'cancelled'::codeexecutionstatus
+            ELSE status::codeexecutionstatus
+        END
+    """)
+    
+    op.execute("""
+        ALTER TABLE code_executions 
+        ALTER COLUMN current_phase TYPE codeexecutionphase 
+        USING CASE 
+            WHEN UPPER(current_phase) = 'VALIDATION' THEN 'validation'::codeexecutionphase
+            WHEN UPPER(current_phase) = 'BUILD' THEN 'build'::codeexecutionphase
+            WHEN UPPER(current_phase) = 'LINT' THEN 'lint'::codeexecutionphase
+            WHEN UPPER(current_phase) = 'TEST' THEN 'test'::codeexecutionphase
+            WHEN UPPER(current_phase) = 'EXECUTION' THEN 'execution'::codeexecutionphase
+            WHEN UPPER(current_phase) = 'CLEANUP' THEN 'cleanup'::codeexecutionphase
+            WHEN current_phase IS NULL THEN NULL
+            ELSE current_phase::codeexecutionphase
+        END
+    """)
 
 
 def downgrade() -> None:

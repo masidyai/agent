@@ -58,7 +58,19 @@ def upgrade() -> None:
     op.create_index(op.f('ix_executions_project_id'), 'executions', ['project_id'], unique=False)
     
     # Alter the status column to use the ENUM type
-    op.execute("ALTER TABLE executions ALTER COLUMN status TYPE executionstatus USING status::executionstatus")
+    # Handle potential case conversion for existing data
+    op.execute("""
+        ALTER TABLE executions 
+        ALTER COLUMN status TYPE executionstatus 
+        USING CASE 
+            WHEN UPPER(status) = 'PENDING' THEN 'pending'::executionstatus
+            WHEN UPPER(status) = 'IN_PROGRESS' THEN 'in_progress'::executionstatus
+            WHEN UPPER(status) = 'COMPLETED' THEN 'completed'::executionstatus
+            WHEN UPPER(status) = 'FAILED' THEN 'failed'::executionstatus
+            WHEN UPPER(status) = 'STOPPED' THEN 'stopped'::executionstatus
+            ELSE status::executionstatus
+        END
+    """)
     
     # Create project_files table
     op.create_table(
@@ -97,7 +109,19 @@ def upgrade() -> None:
     op.create_index(op.f('ix_execution_steps_id'), 'execution_steps', ['id'], unique=False)
     
     # Alter the status column to use the ENUM type
-    op.execute("ALTER TABLE execution_steps ALTER COLUMN status TYPE stepstatus USING status::stepstatus")
+    # Handle potential case conversion for existing data
+    op.execute("""
+        ALTER TABLE execution_steps 
+        ALTER COLUMN status TYPE stepstatus 
+        USING CASE 
+            WHEN UPPER(status) = 'PENDING' THEN 'pending'::stepstatus
+            WHEN UPPER(status) = 'IN_PROGRESS' THEN 'in_progress'::stepstatus
+            WHEN UPPER(status) = 'COMPLETED' THEN 'completed'::stepstatus
+            WHEN UPPER(status) = 'FAILED' THEN 'failed'::stepstatus
+            WHEN UPPER(status) = 'SKIPPED' THEN 'skipped'::stepstatus
+            ELSE status::stepstatus
+        END
+    """)
 
 
 def downgrade() -> None:
