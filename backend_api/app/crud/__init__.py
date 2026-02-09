@@ -2,7 +2,7 @@
 from app.crud.user import user
 from app.crud.team import team, team_member
 from app.crud.project import project
-from app.crud.billing import billing, PLAN_LIMITS
+from app.crud.billing import billing, usage_log, PLAN_LIMITS, PRICING_CONFIG
 from app.crud.deployment import deployment
 from app.crud.memory import memory
 from app.crud.execution import execution, execution_step
@@ -14,10 +14,12 @@ __all__ = [
     "team_member",
     "project",
     "billing",
+    "usage_log",
     "deployment",
     "memory",
     "execution",
     "execution_step",
     "project_file",
     "PLAN_LIMITS",
+    "PRICING_CONFIG",
 ]

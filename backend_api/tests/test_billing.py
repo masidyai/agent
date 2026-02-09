@@ -23,18 +23,17 @@ class TestBillingModels:
         from app.models.billing import BillingPlan
         
         # Free tier should have limits
-        assert PLAN_LIMITS[BillingPlan.FREE]["projects"] == 5
-        assert PLAN_LIMITS[BillingPlan.FREE]["api_calls"] == 10
-        assert PLAN_LIMITS[BillingPlan.FREE]["executions"] == 5
-        assert PLAN_LIMITS[BillingPlan.FREE]["github_repos"] == 1
+        assert PLAN_LIMITS[BillingPlan.FREE]["projects"] == 3
+        assert PLAN_LIMITS[BillingPlan.FREE]["executions"] == 10
+        assert PLAN_LIMITS[BillingPlan.FREE]["deployments"] == 1
         
         # Pro tier should have higher limits
-        assert PLAN_LIMITS[BillingPlan.PRO]["projects"] == 50
-        assert PLAN_LIMITS[BillingPlan.PRO]["api_calls"] == 100
+        assert PLAN_LIMITS[BillingPlan.PRO]["projects"] == 25
+        assert PLAN_LIMITS[BillingPlan.PRO]["executions"] == 100
         
         # Enterprise should be unlimited
         assert PLAN_LIMITS[BillingPlan.ENTERPRISE]["projects"] == -1
-        assert PLAN_LIMITS[BillingPlan.ENTERPRISE]["api_calls"] == -1
+        assert PLAN_LIMITS[BillingPlan.ENTERPRISE]["executions"] == -1
 
 
 class TestUsageTracking:

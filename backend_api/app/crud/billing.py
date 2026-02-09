@@ -1,15 +1,25 @@
 """
 Billing CRUD operations
 """
-from typing import Optional
+from datetime import datetime, timezone
+from typing import Optional, List
 from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.crud.base import CRUDBase
-from app.models.billing import Billing, BillingPlan, BillingStatus
+from app.models.billing import Billing, BillingPlan, BillingStatus, UsageLog, UsageType
 from app.schemas.billing import BillingCreate, BillingUpdate
+
+
+# Pricing configuration
+PRICING_CONFIG = {
+    "openai_cost_per_1k_tokens": 0.0015,
+    "docker_cost_per_minute": 0.001,
+    "github_storage_per_repo": 0.10,
+    "platform_markup_percent": 10,
+}
 
 
 # Plan limits configuration
@@ -175,6 +185,23 @@ class CRUDBilling(CRUDBase[Billing, BillingCreate, BillingUpdate]):
         await db.refresh(billing)
         return billing
     
+    async def add_cost(
+        self,
+        db: AsyncSession,
+        *,
+        billing: Billing,
+        openai_cost: float = 0.0,
+        docker_cost: float = 0.0,
+    ) -> Billing:
+        """Add costs to billing record"""
+        billing.openai_cost += openai_cost
+        billing.docker_cost += docker_cost
+        billing.total_cost = billing.openai_cost + billing.docker_cost
+        db.add(billing)
+        await db.flush()
+        await db.refresh(billing)
+        return billing
+    
     async def check_limit(
         self,
         db: AsyncSession,
@@ -202,4 +229,71 @@ class CRUDBilling(CRUDBase[Billing, BillingCreate, BillingUpdate]):
         return current < limit, current, limit
 
 
+class CRUDUsageLog:
+    """CRUD operations for UsageLog model"""
+    
+    async def create_log(
+        self,
+        db: AsyncSession,
+        *,
+        user_id: UUID,
+        usage_type: UsageType,
+        quantity: int,
+        cost: float,
+        metadata: Optional[dict] = None,
+    ) -> UsageLog:
+        """Create a usage log entry"""
+        log = UsageLog(
+            user_id=user_id,
+            usage_type=usage_type,
+            quantity=quantity,
+            cost=cost,
+            extra_data=metadata,
+            timestamp=datetime.now(timezone.utc),
+        )
+        db.add(log)
+        await db.flush()
+        await db.refresh(log)
+        return log
+    
+    async def get_by_user(
+        self,
+        db: AsyncSession,
+        *,
+        user_id: UUID,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> List[UsageLog]:
+        """Get usage logs for a user"""
+        result = await db.execute(
+            select(UsageLog)
+            .where(UsageLog.user_id == user_id)
+            .order_by(UsageLog.timestamp.desc())
+            .offset(skip)
+            .limit(limit)
+        )
+        return list(result.scalars().all())
+    
+    async def get_by_type(
+        self,
+        db: AsyncSession,
+        *,
+        user_id: UUID,
+        usage_type: UsageType,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> List[UsageLog]:
+        """Get usage logs for a user by type"""
+        result = await db.execute(
+            select(UsageLog)
+            .where(UsageLog.user_id == user_id, UsageLog.usage_type == usage_type)
+            .order_by(UsageLog.timestamp.desc())
+            .offset(skip)
+            .limit(limit)
+        )
+        return list(result.scalars().all())
+
+
 billing = CRUDBilling(Billing)
+usage_log = CRUDUsageLog()
+

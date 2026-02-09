@@ -6,7 +6,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional, TYPE_CHECKING
 
-from sqlalchemy import String, DateTime, ForeignKey, Integer, Uuid, Enum as SQLEnum
+from sqlalchemy import String, DateTime, ForeignKey, Integer, Uuid, Enum as SQLEnum, Float, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -29,6 +29,15 @@ class BillingStatus(str, Enum):
     PAST_DUE = "past_due"
     CANCELED = "canceled"
     TRIALING = "trialing"
+
+
+class UsageType(str, Enum):
+    """Usage type for tracking different resource usage"""
+    OPENAI_CALL = "openai_call"
+    DOCKER_EXEC = "docker_exec"
+    GITHUB_REPO = "github_repo"
+    PROJECT_CREATE = "project_create"
+    API_CALL = "api_call"
 
 
 class Billing(Base):
@@ -68,6 +77,11 @@ class Billing(Base):
     usage_deployments: Mapped[int] = mapped_column(Integer, default=0)
     usage_api_calls: Mapped[int] = mapped_column(Integer, default=0)
     
+    # Cost tracking
+    openai_cost: Mapped[float] = mapped_column(Float, default=0.0)
+    docker_cost: Mapped[float] = mapped_column(Float, default=0.0)
+    total_cost: Mapped[float] = mapped_column(Float, default=0.0)
+    
     # Limits based on plan
     limit_projects: Mapped[int] = mapped_column(Integer, default=3)
     limit_executions: Mapped[int] = mapped_column(Integer, default=10)
@@ -93,3 +107,32 @@ class Billing(Base):
     @property
     def is_over_execution_limit(self) -> bool:
         return self.usage_executions >= self.limit_executions
+
+
+class UsageLog(Base):
+    """Usage log for tracking detailed resource consumption"""
+    
+    __tablename__ = "usage_logs"
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        primary_key=True,
+        default=uuid.uuid4,
+        index=True,
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        index=True,
+    )
+    usage_type: Mapped[UsageType] = mapped_column(
+        SQLEnum(UsageType),
+        index=True,
+    )
+    quantity: Mapped[int] = mapped_column(Integer, default=0)
+    cost: Mapped[float] = mapped_column(Float, default=0.0)
+    extra_data: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    
+    def __repr__(self) -> str:
+        return f"<UsageLog {self.user_id} - {self.usage_type} - {self.quantity}>"
