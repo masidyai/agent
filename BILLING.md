@@ -213,7 +213,7 @@ await usage_tracking.log_openai_usage(
     user_id=user.id,
     tokens=1500,
     model="gpt-4",
-    metadata={"request_id": "abc123"}
+    extra_data={"request_id": "abc123"}
 )
 
 # Log Docker execution
@@ -221,7 +221,7 @@ await usage_tracking.log_docker_usage(
     db,
     user_id=user.id,
     minutes=2.5,
-    metadata={"container_id": "xyz789"}
+    extra_data={"container_id": "xyz789"}
 )
 
 # Log GitHub repo creation
@@ -229,7 +229,7 @@ await usage_tracking.log_github_repo_creation(
     db,
     user_id=user.id,
     repo_name="my-repo",
-    metadata={"org": "my-org"}
+    extra_data={"org": "my-org"}
 )
 
 # Log project creation
@@ -237,7 +237,7 @@ await usage_tracking.log_project_creation(
     db,
     user_id=user.id,
     project_id=project.id,
-    metadata={"name": "My Project"}
+    extra_data={"name": "My Project"}
 )
 ```
 

@@ -45,13 +45,13 @@ class UsageTrackingService:
         user_id: UUID,
         tokens: int,
         model: str = "gpt-4",
-        metadata: Optional[dict] = None,
+        extra_data: Optional[dict] = None,
     ) -> None:
         """Log OpenAI API usage and update billing"""
         cost = self.calculate_openai_cost(tokens)
         
         # Create usage log
-        log_metadata = metadata or {}
+        log_metadata = extra_data or {}
         log_metadata["model"] = model
         log_metadata["tokens"] = tokens
         
@@ -61,7 +61,7 @@ class UsageTrackingService:
             usage_type=UsageType.OPENAI_CALL,
             quantity=tokens,
             cost=cost,
-            metadata=log_metadata,
+            extra_data=log_metadata,
         )
         
         # Update billing
@@ -80,13 +80,13 @@ class UsageTrackingService:
         *,
         user_id: UUID,
         minutes: float,
-        metadata: Optional[dict] = None,
+        extra_data: Optional[dict] = None,
     ) -> None:
         """Log Docker execution usage and update billing"""
         cost = self.calculate_docker_cost(minutes)
         
         # Create usage log
-        log_metadata = metadata or {}
+        log_metadata = extra_data or {}
         log_metadata["duration_minutes"] = minutes
         
         await crud_usage_log.create_log(
@@ -95,7 +95,7 @@ class UsageTrackingService:
             usage_type=UsageType.DOCKER_EXEC,
             quantity=int(minutes * 60),  # Convert to seconds for quantity
             cost=cost,
-            metadata=log_metadata,
+            extra_data=log_metadata,
         )
         
         # Update billing
@@ -114,13 +114,13 @@ class UsageTrackingService:
         *,
         user_id: UUID,
         repo_name: str,
-        metadata: Optional[dict] = None,
+        extra_data: Optional[dict] = None,
     ) -> None:
         """Log GitHub repo creation"""
         cost = self.calculate_github_cost(1)
         
         # Create usage log
-        log_metadata = metadata or {}
+        log_metadata = extra_data or {}
         log_metadata["repo_name"] = repo_name
         
         await crud_usage_log.create_log(
@@ -129,7 +129,7 @@ class UsageTrackingService:
             usage_type=UsageType.GITHUB_REPO,
             quantity=1,
             cost=cost,
-            metadata=log_metadata,
+            extra_data=log_metadata,
         )
         
         # Update billing
@@ -145,11 +145,11 @@ class UsageTrackingService:
         *,
         user_id: UUID,
         project_id: UUID,
-        metadata: Optional[dict] = None,
+        extra_data: Optional[dict] = None,
     ) -> None:
         """Log project creation"""
         # Create usage log
-        log_metadata = metadata or {}
+        log_metadata = extra_data or {}
         log_metadata["project_id"] = str(project_id)
         
         await crud_usage_log.create_log(
@@ -158,7 +158,7 @@ class UsageTrackingService:
             usage_type=UsageType.PROJECT_CREATE,
             quantity=1,
             cost=0.0,  # No direct cost, but counts toward quota
-            metadata=log_metadata,
+            extra_data=log_metadata,
         )
         
         # Update billing

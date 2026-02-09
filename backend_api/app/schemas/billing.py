@@ -88,3 +88,48 @@ class PlanLimits(BaseModel):
 class PlansResponse(BaseModel):
     """Schema for available plans"""
     plans: dict[str, PlanLimits]
+
+
+class UsageLogCreate(BaseModel):
+    """Schema for creating usage log"""
+    user_id: UUID
+    usage_type: UsageType
+    quantity: int
+    cost: float
+    extra_data: Optional[dict] = None
+
+
+class UsageLogResponse(BaseModel):
+    """Schema for usage log response"""
+    model_config = ConfigDict(from_attributes=True)
+    
+    id: UUID
+    user_id: UUID
+    usage_type: UsageType
+    quantity: int
+    cost: float
+    extra_data: Optional[dict] = None
+    timestamp: datetime
+
+
+class InvoiceResponse(BaseModel):
+    """Schema for invoice response"""
+    model_config = ConfigDict(from_attributes=True)
+    
+    id: UUID
+    user_id: UUID
+    stripe_invoice_id: Optional[str] = None
+    amount: float
+    status: InvoiceStatus
+    period_start: datetime
+    period_end: datetime
+    items: Optional[dict] = None
+    due_date: Optional[datetime] = None
+    paid_at: Optional[datetime] = None
+    created_at: datetime
+
+
+class InvoiceListResponse(BaseModel):
+    """Schema for invoice list response"""
+    invoices: list[InvoiceResponse]
+    total: int

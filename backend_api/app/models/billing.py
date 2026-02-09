@@ -92,4 +92,95 @@ class Billing(Base):
     
     @property
     def is_over_execution_limit(self) -> bool:
-        return self.usage_executions >= self.limit_executions
+        return self.limit_executions != -1 and self.usage_executions >= self.limit_executions
+    
+    @property
+    def is_over_api_call_limit(self) -> bool:
+        return self.limit_api_calls != -1 and self.usage_api_calls >= self.limit_api_calls
+    
+    @property
+    def is_trial_active(self) -> bool:
+        """Check if trial period is still active"""
+        if not self.trial_end:
+            return False
+        return datetime.utcnow() < self.trial_end
+    
+    @property
+    def is_trial_expired(self) -> bool:
+        """Check if trial period has expired"""
+        if not self.trial_end:
+            return False
+        return datetime.utcnow() >= self.trial_end
+
+
+class UsageLog(Base):
+    """Detailed usage tracking log"""
+    
+    __tablename__ = "usage_logs"
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        primary_key=True,
+        default=uuid.uuid4,
+        index=True,
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        index=True,
+    )
+    usage_type: Mapped[UsageType] = mapped_column(SQLEnum(UsageType), index=True)
+    
+    # Quantity and cost
+    quantity: Mapped[int] = mapped_column(Integer, default=1)  # tokens, minutes, count
+    cost: Mapped[float] = mapped_column(Float, default=0.0)
+    
+    # Extra data (flexible JSON for usage-specific data)
+    extra_data: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    
+    timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    
+    def __repr__(self) -> str:
+        return f"<UsageLog {self.user_id} - {self.usage_type} - ${self.cost}>"
+
+
+class Invoice(Base):
+    """Invoice/billing history"""
+    
+    __tablename__ = "invoices"
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        primary_key=True,
+        default=uuid.uuid4,
+        index=True,
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        index=True,
+    )
+    
+    # Stripe integration
+    stripe_invoice_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, unique=True)
+    
+    # Invoice details
+    amount: Mapped[float] = mapped_column(Float, default=0.0)
+    status: Mapped[InvoiceStatus] = mapped_column(SQLEnum(InvoiceStatus), default=InvoiceStatus.DRAFT)
+    
+    # Billing period
+    period_start: Mapped[datetime] = mapped_column(DateTime)
+    period_end: Mapped[datetime] = mapped_column(DateTime)
+    
+    # Usage breakdown (JSON field for flexible itemization)
+    items: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    
+    # Dates
+    due_date: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    paid_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    def __repr__(self) -> str:
+        return f"<Invoice {self.user_id} - ${self.amount} - {self.status}>"

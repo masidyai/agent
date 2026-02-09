@@ -202,4 +202,131 @@ class CRUDBilling(CRUDBase[Billing, BillingCreate, BillingUpdate]):
         return current < limit, current, limit
 
 
+class CRUDUsageLog(CRUDBase[UsageLog, UsageLogCreate, None]):
+    """CRUD operations for UsageLog model"""
+    
+    async def create_log(
+        self,
+        db: AsyncSession,
+        *,
+        user_id: UUID,
+        usage_type: UsageType,
+        quantity: int,
+        cost: float,
+        extra_data: Optional[dict] = None,
+    ) -> UsageLog:
+        """Create a usage log entry"""
+        db_obj = UsageLog(
+            user_id=user_id,
+            usage_type=usage_type,
+            quantity=quantity,
+            cost=cost,
+            extra_data=extra_data,
+        )
+        db.add(db_obj)
+        await db.flush()
+        await db.refresh(db_obj)
+        return db_obj
+    
+    async def get_user_logs(
+        self,
+        db: AsyncSession,
+        *,
+        user_id: UUID,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+        usage_type: Optional[UsageType] = None,
+        limit: int = 100,
+    ) -> list[UsageLog]:
+        """Get usage logs for a user with optional filters"""
+        query = select(UsageLog).where(UsageLog.user_id == user_id)
+        
+        if start_date:
+            query = query.where(UsageLog.timestamp >= start_date)
+        if end_date:
+            query = query.where(UsageLog.timestamp <= end_date)
+        if usage_type:
+            query = query.where(UsageLog.usage_type == usage_type)
+        
+        query = query.order_by(UsageLog.timestamp.desc()).limit(limit)
+        
+        result = await db.execute(query)
+        return list(result.scalars().all())
+
+
+class CRUDInvoice(CRUDBase[Invoice, None, None]):
+    """CRUD operations for Invoice model"""
+    
+    async def create_invoice(
+        self,
+        db: AsyncSession,
+        *,
+        user_id: UUID,
+        amount: float,
+        period_start: datetime,
+        period_end: datetime,
+        items: Optional[dict] = None,
+        stripe_invoice_id: Optional[str] = None,
+    ) -> Invoice:
+        """Create an invoice"""
+        db_obj = Invoice(
+            user_id=user_id,
+            amount=amount,
+            status=InvoiceStatus.DRAFT,
+            period_start=period_start,
+            period_end=period_end,
+            items=items,
+            stripe_invoice_id=stripe_invoice_id,
+        )
+        db.add(db_obj)
+        await db.flush()
+        await db.refresh(db_obj)
+        return db_obj
+    
+    async def get_user_invoices(
+        self,
+        db: AsyncSession,
+        *,
+        user_id: UUID,
+        limit: int = 50,
+    ) -> list[Invoice]:
+        """Get invoices for a user"""
+        result = await db.execute(
+            select(Invoice)
+            .where(Invoice.user_id == user_id)
+            .order_by(Invoice.created_at.desc())
+            .limit(limit)
+        )
+        return list(result.scalars().all())
+    
+    async def get_by_stripe_invoice(
+        self,
+        db: AsyncSession,
+        *,
+        stripe_invoice_id: str,
+    ) -> Optional[Invoice]:
+        """Get invoice by Stripe invoice ID"""
+        result = await db.execute(
+            select(Invoice).where(Invoice.stripe_invoice_id == stripe_invoice_id)
+        )
+        return result.scalar_one_or_none()
+    
+    async def update_status(
+        self,
+        db: AsyncSession,
+        *,
+        invoice: Invoice,
+        status: InvoiceStatus,
+        paid_at: Optional[datetime] = None,
+    ) -> Invoice:
+        """Update invoice status"""
+        invoice.status = status
+        if paid_at:
+            invoice.paid_at = paid_at
+        db.add(invoice)
+        await db.flush()
+        await db.refresh(invoice)
+        return invoice
+
+
 billing = CRUDBilling(Billing)
