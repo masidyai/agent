@@ -45,7 +45,7 @@ class ChainEvent(Base):
     prev_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     
     # Additional data
-    metadata: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON string
+    event_metadata: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON string
     ip_address: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     user_agent: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     

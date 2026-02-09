@@ -135,7 +135,7 @@ class EventLogger:
             risk_level=risk_level,
             event_hash=event_hash,
             prev_hash=prev_hash,
-            metadata=json.dumps(metadata) if metadata else None,
+            event_metadata=json.dumps(metadata) if metadata else None,
             ip_address=ip_address,
             user_agent=user_agent,
             timestamp=timestamp,

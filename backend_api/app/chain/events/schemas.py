@@ -15,7 +15,7 @@ class ChainEventBase(BaseModel):
     action: str
     target: Optional[str] = None
     target_type: Optional[str] = None
-    metadata: Optional[str] = None
+    event_metadata: Optional[str] = None
     ip_address: Optional[str] = None
     user_agent: Optional[str] = None
 
