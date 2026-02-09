@@ -317,7 +317,7 @@ async def push_project_to_github(
         
         return PushToGitHubResponse(
             success=True,
-            message=f"Project pushed to GitHub successfully",
+            message="Project pushed to GitHub successfully",
             repo_url=repo.html_url,
             repo_name=repo.name,
             commit_sha=commit_sha,

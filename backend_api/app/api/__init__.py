@@ -2,7 +2,7 @@
 from fastapi import APIRouter
 
 from app.api import auth, users, teams, projects, billing, deployments, memory
-from app.api import websocket, sandbox, visual_builder, runs, github
+from app.api import websocket, sandbox, visual_builder, runs, github, code_executions
 
 api_router = APIRouter()
 
