@@ -7,12 +7,6 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
 const templates = [
   {
-    id: 'blank',
-    name: 'Blank Project',
-    description: 'Start from scratch with an empty project',
-    icon: '📄',
-  },
-  {
     id: 'saas',
     name: 'SaaS Application',
     description: 'Full-stack app with authentication, dashboard, and billing',
@@ -25,22 +19,10 @@ const templates = [
     icon: '🔌',
   },
   {
-    id: 'ecommerce',
-    name: 'E-commerce',
-    description: 'Online store with products, cart, and payments',
-    icon: '🛒',
-  },
-  {
-    id: 'blog',
-    name: 'Blog Platform',
-    description: 'Content management with markdown and SEO',
-    icon: '📝',
-  },
-  {
-    id: 'dashboard',
-    name: 'Admin Dashboard',
-    description: 'Data visualization with charts and tables',
-    icon: '📊',
+    id: 'refactor',
+    name: 'Refactor Project',
+    description: 'Add Docker, CI/CD, and modernize existing code',
+    icon: '🔧',
   },
 ]
 
@@ -53,7 +35,7 @@ export default function NewProjectPage() {
   const [project, setProject] = useState({
     name: '',
     description: '',
-    template: 'blank',
+    template: 'saas',
   })
 
   const handleCreate = async () => {
@@ -77,8 +59,8 @@ export default function NewProjectPage() {
         },
         body: JSON.stringify({
           name: project.name.toLowerCase().replace(/\s+/g, '_'),
-          description: project.description,
-          project_type: project.template,
+          prompt: project.description || `Create a ${project.template} project`,
+          flow: project.template,
         }),
       })
 
