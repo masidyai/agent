@@ -1,7 +1,6 @@
 """
 Billing CRUD operations
 """
-from datetime import datetime, timedelta
 from typing import Optional
 from uuid import UUID
 
@@ -9,54 +8,36 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.crud.base import CRUDBase
-from app.models.billing import (
-    Billing, BillingPlan, BillingStatus, UsageLog, Invoice, InvoiceStatus, UsageType
-)
-from app.schemas.billing import BillingCreate, BillingUpdate, UsageLogCreate
+from app.models.billing import Billing, BillingPlan, BillingStatus
+from app.schemas.billing import BillingCreate, BillingUpdate
 
 
-# Plan limits configuration - updated per requirements
+# Plan limits configuration
 PLAN_LIMITS = {
     BillingPlan.FREE: {
-        "projects": 5,
-        "executions": 5,
+        "projects": 3,
+        "executions": 10,
         "deployments": 1,
         "team_members": 0,
-        "api_calls": 10,
-        "github_repos": 1,
     },
     BillingPlan.PRO: {
-        "projects": 50,
-        "executions": 50,
-        "deployments": 50,
+        "projects": 25,
+        "executions": 100,
+        "deployments": 5,
         "team_members": 0,
-        "api_calls": 100,
-        "github_repos": 50,
     },
     BillingPlan.TEAM: {
         "projects": 100,
         "executions": 500,
         "deployments": 20,
         "team_members": 10,
-        "api_calls": 500,
-        "github_repos": 100,
     },
     BillingPlan.ENTERPRISE: {
         "projects": -1,  # Unlimited
         "executions": -1,
         "deployments": -1,
         "team_members": -1,
-        "api_calls": -1,
-        "github_repos": -1,
     },
-}
-
-# Pricing configuration (from requirements)
-PRICING_CONFIG = {
-    "openai_cost_per_1k_tokens": 0.0015,
-    "docker_cost_per_minute": 0.001,
-    "github_storage_per_repo": 0.10,
-    "platform_markup_percent": 10,
 }
 
 
@@ -105,24 +86,15 @@ class CRUDBilling(CRUDBase[Billing, BillingCreate, BillingUpdate]):
         *,
         user_id: UUID,
     ) -> Billing:
-        """Create default billing record for a user with 7-day trial"""
+        """Create default billing record for a user"""
         limits = PLAN_LIMITS[BillingPlan.FREE]
-        now = datetime.utcnow()
-        trial_end = now + timedelta(days=7)
-        
         db_obj = Billing(
             user_id=user_id,
             plan=BillingPlan.FREE,
-            status=BillingStatus.TRIALING,
-            trial_start=now,
-            trial_end=trial_end,
+            status=BillingStatus.ACTIVE,
             limit_projects=limits["projects"],
             limit_executions=limits["executions"],
             limit_deployments=limits["deployments"],
-            limit_api_calls=limits["api_calls"],
-            limit_repos=limits["github_repos"],
-            current_period_start=now,
-            current_period_end=trial_end,
         )
         db.add(db_obj)
         await db.flush()
@@ -142,8 +114,6 @@ class CRUDBilling(CRUDBase[Billing, BillingCreate, BillingUpdate]):
         billing.limit_projects = limits["projects"]
         billing.limit_executions = limits["executions"]
         billing.limit_deployments = limits["deployments"]
-        billing.limit_api_calls = limits["api_calls"]
-        billing.limit_repos = limits["github_repos"]
         db.add(billing)
         await db.flush()
         await db.refresh(billing)
@@ -178,31 +148,12 @@ class CRUDBilling(CRUDBase[Billing, BillingCreate, BillingUpdate]):
         executions: int = 0,
         deployments: int = 0,
         api_calls: int = 0,
-        github_repos: int = 0,
     ) -> Billing:
         """Increment usage counters"""
         billing.usage_projects += projects
         billing.usage_executions += executions
         billing.usage_deployments += deployments
         billing.usage_api_calls += api_calls
-        billing.usage_github_repos += github_repos
-        db.add(billing)
-        await db.flush()
-        await db.refresh(billing)
-        return billing
-    
-    async def add_cost(
-        self,
-        db: AsyncSession,
-        *,
-        billing: Billing,
-        openai_cost: float = 0.0,
-        docker_cost: float = 0.0,
-    ) -> Billing:
-        """Add costs to billing record"""
-        billing.cost_openai += openai_cost
-        billing.cost_docker += docker_cost
-        billing.cost_total = billing.cost_openai + billing.cost_docker
         db.add(billing)
         await db.flush()
         await db.refresh(billing)
@@ -219,10 +170,6 @@ class CRUDBilling(CRUDBase[Billing, BillingCreate, BillingUpdate]):
         billing.usage_executions = 0
         billing.usage_deployments = 0
         billing.usage_api_calls = 0
-        billing.usage_github_repos = 0
-        billing.cost_openai = 0.0
-        billing.cost_docker = 0.0
-        billing.cost_total = 0.0
         db.add(billing)
         await db.flush()
         await db.refresh(billing)
@@ -233,23 +180,17 @@ class CRUDBilling(CRUDBase[Billing, BillingCreate, BillingUpdate]):
         db: AsyncSession,
         *,
         user_id: UUID,
-        limit_type: str,  # projects, executions, deployments, api_calls, github_repos
+        limit_type: str,  # projects, executions, deployments
     ) -> tuple[bool, int, int]:
         """Check if user is within usage limits. Returns (is_ok, current, limit)"""
         billing = await self.get_by_user(db, user_id=user_id)
         if not billing:
             return False, 0, 0
         
-        # Check if trial expired without payment
-        if billing.is_trial_expired and not billing.stripe_subscription_id:
-            return False, 0, 0
-        
         usage_map = {
             "projects": (billing.usage_projects, billing.limit_projects),
             "executions": (billing.usage_executions, billing.limit_executions),
             "deployments": (billing.usage_deployments, billing.limit_deployments),
-            "api_calls": (billing.usage_api_calls, billing.limit_api_calls),
-            "github_repos": (billing.usage_github_repos, billing.limit_repos),
         }
         
         current, limit = usage_map.get(limit_type, (0, 0))
@@ -389,5 +330,3 @@ class CRUDInvoice(CRUDBase[Invoice, None, None]):
 
 
 billing = CRUDBilling(Billing)
-usage_log = CRUDUsageLog(UsageLog)
-invoice = CRUDInvoice(Invoice)

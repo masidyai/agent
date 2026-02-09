@@ -42,6 +42,12 @@ class ProjectResponse(ProjectBase):
     files_count: str = "0"
     steps_completed: str = "0"
     steps_total: str = "0"
+    github_repo_url: Optional[str] = None
+    github_repo_name: Optional[str] = None
+    github_repo_id: Optional[int] = None
+    github_created_at: Optional[datetime] = None
+    github_last_sync: Optional[datetime] = None
+    is_public: bool = False
     created_at: datetime
     updated_at: datetime
 

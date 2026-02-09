@@ -7,7 +7,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
-from app.models.billing import BillingPlan, BillingStatus, UsageType, InvoiceStatus
+from app.models.billing import BillingPlan, BillingStatus
 
 
 class BillingBase(BaseModel):
@@ -34,24 +34,15 @@ class BillingResponse(BillingBase):
     user_id: UUID
     status: BillingStatus
     stripe_customer_id: Optional[str] = None
-    trial_start: Optional[datetime] = None
-    trial_end: Optional[datetime] = None
     usage_projects: int
     usage_executions: int
     usage_deployments: int
     usage_api_calls: int
-    usage_github_repos: int
-    cost_openai: float
-    cost_docker: float
-    cost_total: float
     limit_projects: int
     limit_executions: int
     limit_deployments: int
-    limit_api_calls: int
-    limit_repos: int
     current_period_start: Optional[datetime] = None
     current_period_end: Optional[datetime] = None
-    auto_renew: bool
     created_at: datetime
 
 
@@ -61,10 +52,6 @@ class UsageResponse(BaseModel):
     executions: int
     deployments: int
     api_calls: int
-    github_repos: int
-    cost_openai: float
-    cost_docker: float
-    cost_total: float
     limits: dict
 
 
@@ -93,8 +80,6 @@ class PlanLimits(BaseModel):
     executions: int
     deployments: int
     team_members: int
-    api_calls: int
-    github_repos: int
     price_monthly: float
     price_yearly: float
     features: list[str]

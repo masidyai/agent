@@ -85,6 +85,11 @@ class Deployment(Base):
     commit_sha: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
     branch: Mapped[str] = mapped_column(String(255), default="main")
     
+    # GitHub integration fields
+    github_commit_sha: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
+    github_pr_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    github_release_tag: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

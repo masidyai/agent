@@ -2,12 +2,13 @@
 from fastapi import APIRouter
 
 from app.api import auth, users, teams, projects, billing, deployments, memory
-from app.api import websocket, sandbox, visual_builder, runs
+from app.api import websocket, sandbox, visual_builder, runs, github
 
 api_router = APIRouter()
 
 # Include all routers
 api_router.include_router(auth.router, prefix="/auth", tags=["Authentication"])
+api_router.include_router(github.router, tags=["GitHub"])
 api_router.include_router(users.router, prefix="/users", tags=["Users"])
 api_router.include_router(teams.router, prefix="/teams", tags=["Teams"])
 api_router.include_router(projects.router, prefix="/projects", tags=["Projects"])
