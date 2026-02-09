@@ -12,20 +12,20 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.crud import execution as crud_execution
+from app.crud import code_execution as crud_code_execution
 from app.crud import project as crud_project
 from app.crud import billing as crud_billing
-from app.schemas.execution import (
-    ExecutionCreate,
-    ExecutionResponse,
-    ExecutionListResponse,
-    ExecutionRunRequest,
-    ExecutionLogResponse,
-    ExecutionHealthResponse,
+from app.schemas.code_execution import (
+    CodeExecutionCreate,
+    CodeExecutionResponse,
+    CodeExecutionListResponse,
+    CodeExecutionRunRequest,
+    CodeExecutionLogResponse,
+    CodeExecutionHealthResponse,
 )
 from app.api.deps import get_current_user
 from app.models.user import User
-from app.models.execution import ExecutionStatus, ExecutionPhase
+from app.models.code_execution import CodeExecutionStatus, CodeExecutionPhase
 from app.services.docker_executor import docker_executor, DockerExecutionConfig
 
 logger = logging.getLogger(__name__)
@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.get("/", response_model=ExecutionListResponse)
+@router.get("/", response_model=CodeExecutionListResponse)
 async def list_executions(
     project_id: Optional[UUID] = None,
     skip: int = 0,
@@ -51,10 +51,10 @@ async def list_executions(
                 detail="Project not found"
             )
         
-        executions = await crud_execution.get_by_project(
+        executions = await crud_code_execution.get_by_project(
             db, project_id=project_id, skip=skip, limit=limit
         )
-        total = await crud_execution.count_by_project(db, project_id=project_id)
+        total = await crud_code_execution.count_by_project(db, project_id=project_id)
     else:
         # Get all executions for user's projects (would need to join with projects)
         # For now, require project_id
@@ -63,7 +63,7 @@ async def list_executions(
             detail="project_id parameter is required"
         )
     
-    return ExecutionListResponse(
+    return CodeExecutionListResponse(
         executions=executions,
         total=total,
         page=skip // limit + 1,
@@ -71,10 +71,10 @@ async def list_executions(
     )
 
 
-@router.post("/", response_model=ExecutionResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=CodeExecutionResponse, status_code=status.HTTP_201_CREATED)
 async def create_execution(
     project_id: UUID,
-    execution_in: ExecutionCreate,
+    execution_in: CodeExecutionCreate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -104,7 +104,7 @@ async def create_execution(
         )
     
     # Create execution
-    execution = await crud_execution.create_for_project(
+    execution = await crud_code_execution.create_for_project(
         db, project_id=project_id, obj_in=execution_in
     )
     
@@ -118,14 +118,14 @@ async def create_execution(
     return execution
 
 
-@router.get("/{execution_id}", response_model=ExecutionResponse)
+@router.get("/{execution_id}", response_model=CodeExecutionResponse)
 async def get_execution(
     execution_id: UUID,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """Get execution details"""
-    execution = await crud_execution.get(db, id=execution_id)
+    execution = await crud_code_execution.get(db, id=execution_id)
     if not execution:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -143,16 +143,16 @@ async def get_execution(
     return execution
 
 
-@router.post("/{execution_id}/run", response_model=ExecutionResponse)
+@router.post("/{execution_id}/run", response_model=CodeExecutionResponse)
 async def run_execution(
     execution_id: UUID,
-    request: ExecutionRunRequest,
+    request: CodeExecutionRunRequest,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """Start running an execution"""
-    execution = await crud_execution.get(db, id=execution_id)
+    execution = await crud_code_execution.get(db, id=execution_id)
     if not execution:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -189,8 +189,8 @@ async def run_execution(
         )
     
     # Update execution status to running
-    execution = await crud_execution.update_status(
-        db, execution=execution, status=ExecutionStatus.BUILDING, phase=ExecutionPhase.BUILD
+    execution = await crud_code_execution.update_status(
+        db, execution=execution, status=CodeExecutionStatus.BUILDING, phase=CodeExecutionPhase.BUILD
     )
     await db.commit()
     
@@ -217,7 +217,7 @@ async def _run_execution_task(
     
     async with async_session_maker() as db:
         try:
-            execution = await crud_execution.get(db, id=execution_id)
+            execution = await crud_code_execution.get(db, id=execution_id)
             if not execution:
                 logger.error(f"Execution {execution_id} not found")
                 return
@@ -236,28 +236,28 @@ async def _run_execution_task(
                 logger.info(f"[{execution_id}] [{phase}] {message}")
                 # Update current phase in database
                 if phase == "build":
-                    await crud_execution.update_status(
+                    await crud_code_execution.update_status(
                         db, execution=execution, 
-                        status=ExecutionStatus.BUILDING, 
-                        phase=ExecutionPhase.BUILD
+                        status=CodeExecutionStatus.BUILDING, 
+                        phase=CodeExecutionPhase.BUILD
                     )
                 elif phase == "lint":
-                    await crud_execution.update_status(
+                    await crud_code_execution.update_status(
                         db, execution=execution,
-                        status=ExecutionStatus.LINTING,
-                        phase=ExecutionPhase.LINT
+                        status=CodeExecutionStatus.LINTING,
+                        phase=CodeExecutionPhase.LINT
                     )
                 elif phase == "test":
-                    await crud_execution.update_status(
+                    await crud_code_execution.update_status(
                         db, execution=execution,
-                        status=ExecutionStatus.TESTING,
-                        phase=ExecutionPhase.TEST
+                        status=CodeExecutionStatus.TESTING,
+                        phase=CodeExecutionPhase.TEST
                     )
                 elif phase == "execution":
-                    await crud_execution.update_status(
+                    await crud_code_execution.update_status(
                         db, execution=execution,
-                        status=ExecutionStatus.RUNNING,
-                        phase=ExecutionPhase.EXECUTION
+                        status=CodeExecutionStatus.RUNNING,
+                        phase=CodeExecutionPhase.EXECUTION
                     )
                 await db.commit()
             
@@ -299,7 +299,7 @@ async def _run_execution_task(
             execution.memory_used_mb = result.memory_used_mb
             
             # Final status
-            execution = await crud_execution.update_status(
+            execution = await crud_code_execution.update_status(
                 db, execution=execution, status=result.status
             )
             
@@ -310,11 +310,11 @@ async def _run_execution_task(
             logger.error(f"Error running execution {execution_id}: {e}", exc_info=True)
             # Update execution with error
             try:
-                execution = await crud_execution.get(db, id=execution_id)
+                execution = await crud_code_execution.get(db, id=execution_id)
                 if execution:
                     execution.execution_error = str(e)
-                    await crud_execution.update_status(
-                        db, execution=execution, status=ExecutionStatus.FAILED
+                    await crud_code_execution.update_status(
+                        db, execution=execution, status=CodeExecutionStatus.FAILED
                     )
                     await db.commit()
             except Exception as inner_e:
@@ -328,7 +328,7 @@ async def get_execution_logs(
     current_user: User = Depends(get_current_user),
 ):
     """Get execution logs (streaming)"""
-    execution = await crud_execution.get(db, id=execution_id)
+    execution = await crud_code_execution.get(db, id=execution_id)
     if not execution:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -364,14 +364,14 @@ async def get_execution_logs(
     
     combined_logs = "\n".join(logs) if logs else "No logs available"
     
-    return ExecutionLogResponse(
+    return CodeExecutionLogResponse(
         execution_id=execution.id,
         logs=combined_logs,
         timestamp=execution.updated_at,
     )
 
 
-@router.get("/{execution_id}/results", response_model=ExecutionResponse)
+@router.get("/{execution_id}/results", response_model=CodeExecutionResponse)
 async def get_execution_results(
     execution_id: UUID,
     db: AsyncSession = Depends(get_db),
@@ -388,7 +388,7 @@ async def stop_execution(
     current_user: User = Depends(get_current_user),
 ):
     """Stop a running execution"""
-    execution = await crud_execution.get(db, id=execution_id)
+    execution = await crud_code_execution.get(db, id=execution_id)
     if not execution:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -417,22 +417,22 @@ async def stop_execution(
             logger.warning(f"Failed to stop container {execution.container_id}")
     
     # Update status
-    execution = await crud_execution.update_status(
-        db, execution=execution, status=ExecutionStatus.CANCELLED
+    execution = await crud_code_execution.update_status(
+        db, execution=execution, status=CodeExecutionStatus.CANCELLED
     )
     await db.commit()
     
     return {"message": "Execution stopped successfully"}
 
 
-@router.get("/{execution_id}/health", response_model=ExecutionHealthResponse)
+@router.get("/{execution_id}/health", response_model=CodeExecutionHealthResponse)
 async def get_execution_health(
     execution_id: UUID,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """Check if execution is still running"""
-    execution = await crud_execution.get(db, id=execution_id)
+    execution = await crud_code_execution.get(db, id=execution_id)
     if not execution:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -453,7 +453,7 @@ async def get_execution_health(
         uptime = datetime.utcnow() - execution.started_at
         uptime_seconds = int(uptime.total_seconds())
     
-    return ExecutionHealthResponse(
+    return CodeExecutionHealthResponse(
         execution_id=execution.id,
         status=execution.status,
         is_running=execution.is_running,
