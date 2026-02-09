@@ -1,6 +1,7 @@
 """
 Billing CRUD operations
 """
+from datetime import datetime, timedelta
 from typing import Optional
 from uuid import UUID
 
@@ -8,36 +9,54 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.crud.base import CRUDBase
-from app.models.billing import Billing, BillingPlan, BillingStatus
-from app.schemas.billing import BillingCreate, BillingUpdate
+from app.models.billing import (
+    Billing, BillingPlan, BillingStatus, UsageLog, Invoice, InvoiceStatus, UsageType
+)
+from app.schemas.billing import BillingCreate, BillingUpdate, UsageLogCreate
 
 
-# Plan limits configuration
+# Plan limits configuration - updated per requirements
 PLAN_LIMITS = {
     BillingPlan.FREE: {
-        "projects": 3,
-        "executions": 10,
+        "projects": 5,
+        "executions": 5,
         "deployments": 1,
         "team_members": 0,
+        "api_calls": 10,
+        "github_repos": 1,
     },
     BillingPlan.PRO: {
-        "projects": 25,
-        "executions": 100,
-        "deployments": 5,
+        "projects": 50,
+        "executions": 50,
+        "deployments": 50,
         "team_members": 0,
+        "api_calls": 100,
+        "github_repos": 50,
     },
     BillingPlan.TEAM: {
         "projects": 100,
         "executions": 500,
         "deployments": 20,
         "team_members": 10,
+        "api_calls": 500,
+        "github_repos": 100,
     },
     BillingPlan.ENTERPRISE: {
         "projects": -1,  # Unlimited
         "executions": -1,
         "deployments": -1,
         "team_members": -1,
+        "api_calls": -1,
+        "github_repos": -1,
     },
+}
+
+# Pricing configuration (from requirements)
+PRICING_CONFIG = {
+    "openai_cost_per_1k_tokens": 0.0015,
+    "docker_cost_per_minute": 0.001,
+    "github_storage_per_repo": 0.10,
+    "platform_markup_percent": 10,
 }
 
 
@@ -86,15 +105,24 @@ class CRUDBilling(CRUDBase[Billing, BillingCreate, BillingUpdate]):
         *,
         user_id: UUID,
     ) -> Billing:
-        """Create default billing record for a user"""
+        """Create default billing record for a user with 7-day trial"""
         limits = PLAN_LIMITS[BillingPlan.FREE]
+        now = datetime.utcnow()
+        trial_end = now + timedelta(days=7)
+        
         db_obj = Billing(
             user_id=user_id,
             plan=BillingPlan.FREE,
-            status=BillingStatus.ACTIVE,
+            status=BillingStatus.TRIALING,
+            trial_start=now,
+            trial_end=trial_end,
             limit_projects=limits["projects"],
             limit_executions=limits["executions"],
             limit_deployments=limits["deployments"],
+            limit_api_calls=limits["api_calls"],
+            limit_repos=limits["github_repos"],
+            current_period_start=now,
+            current_period_end=trial_end,
         )
         db.add(db_obj)
         await db.flush()
@@ -114,6 +142,8 @@ class CRUDBilling(CRUDBase[Billing, BillingCreate, BillingUpdate]):
         billing.limit_projects = limits["projects"]
         billing.limit_executions = limits["executions"]
         billing.limit_deployments = limits["deployments"]
+        billing.limit_api_calls = limits["api_calls"]
+        billing.limit_repos = limits["github_repos"]
         db.add(billing)
         await db.flush()
         await db.refresh(billing)
@@ -148,12 +178,31 @@ class CRUDBilling(CRUDBase[Billing, BillingCreate, BillingUpdate]):
         executions: int = 0,
         deployments: int = 0,
         api_calls: int = 0,
+        github_repos: int = 0,
     ) -> Billing:
         """Increment usage counters"""
         billing.usage_projects += projects
         billing.usage_executions += executions
         billing.usage_deployments += deployments
         billing.usage_api_calls += api_calls
+        billing.usage_github_repos += github_repos
+        db.add(billing)
+        await db.flush()
+        await db.refresh(billing)
+        return billing
+    
+    async def add_cost(
+        self,
+        db: AsyncSession,
+        *,
+        billing: Billing,
+        openai_cost: float = 0.0,
+        docker_cost: float = 0.0,
+    ) -> Billing:
+        """Add costs to billing record"""
+        billing.cost_openai += openai_cost
+        billing.cost_docker += docker_cost
+        billing.cost_total = billing.cost_openai + billing.cost_docker
         db.add(billing)
         await db.flush()
         await db.refresh(billing)
@@ -170,6 +219,10 @@ class CRUDBilling(CRUDBase[Billing, BillingCreate, BillingUpdate]):
         billing.usage_executions = 0
         billing.usage_deployments = 0
         billing.usage_api_calls = 0
+        billing.usage_github_repos = 0
+        billing.cost_openai = 0.0
+        billing.cost_docker = 0.0
+        billing.cost_total = 0.0
         db.add(billing)
         await db.flush()
         await db.refresh(billing)
@@ -180,17 +233,23 @@ class CRUDBilling(CRUDBase[Billing, BillingCreate, BillingUpdate]):
         db: AsyncSession,
         *,
         user_id: UUID,
-        limit_type: str,  # projects, executions, deployments
+        limit_type: str,  # projects, executions, deployments, api_calls, github_repos
     ) -> tuple[bool, int, int]:
         """Check if user is within usage limits. Returns (is_ok, current, limit)"""
         billing = await self.get_by_user(db, user_id=user_id)
         if not billing:
             return False, 0, 0
         
+        # Check if trial expired without payment
+        if billing.is_trial_expired and not billing.stripe_subscription_id:
+            return False, 0, 0
+        
         usage_map = {
             "projects": (billing.usage_projects, billing.limit_projects),
             "executions": (billing.usage_executions, billing.limit_executions),
             "deployments": (billing.usage_deployments, billing.limit_deployments),
+            "api_calls": (billing.usage_api_calls, billing.limit_api_calls),
+            "github_repos": (billing.usage_github_repos, billing.limit_repos),
         }
         
         current, limit = usage_map.get(limit_type, (0, 0))
@@ -202,4 +261,133 @@ class CRUDBilling(CRUDBase[Billing, BillingCreate, BillingUpdate]):
         return current < limit, current, limit
 
 
+class CRUDUsageLog(CRUDBase[UsageLog, UsageLogCreate, None]):
+    """CRUD operations for UsageLog model"""
+    
+    async def create_log(
+        self,
+        db: AsyncSession,
+        *,
+        user_id: UUID,
+        usage_type: UsageType,
+        quantity: int,
+        cost: float,
+        metadata: Optional[dict] = None,
+    ) -> UsageLog:
+        """Create a usage log entry"""
+        db_obj = UsageLog(
+            user_id=user_id,
+            usage_type=usage_type,
+            quantity=quantity,
+            cost=cost,
+            metadata=metadata,
+        )
+        db.add(db_obj)
+        await db.flush()
+        await db.refresh(db_obj)
+        return db_obj
+    
+    async def get_user_logs(
+        self,
+        db: AsyncSession,
+        *,
+        user_id: UUID,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+        usage_type: Optional[UsageType] = None,
+        limit: int = 100,
+    ) -> list[UsageLog]:
+        """Get usage logs for a user with optional filters"""
+        query = select(UsageLog).where(UsageLog.user_id == user_id)
+        
+        if start_date:
+            query = query.where(UsageLog.timestamp >= start_date)
+        if end_date:
+            query = query.where(UsageLog.timestamp <= end_date)
+        if usage_type:
+            query = query.where(UsageLog.usage_type == usage_type)
+        
+        query = query.order_by(UsageLog.timestamp.desc()).limit(limit)
+        
+        result = await db.execute(query)
+        return list(result.scalars().all())
+
+
+class CRUDInvoice(CRUDBase[Invoice, None, None]):
+    """CRUD operations for Invoice model"""
+    
+    async def create_invoice(
+        self,
+        db: AsyncSession,
+        *,
+        user_id: UUID,
+        amount: float,
+        period_start: datetime,
+        period_end: datetime,
+        items: Optional[dict] = None,
+        stripe_invoice_id: Optional[str] = None,
+    ) -> Invoice:
+        """Create an invoice"""
+        db_obj = Invoice(
+            user_id=user_id,
+            amount=amount,
+            status=InvoiceStatus.DRAFT,
+            period_start=period_start,
+            period_end=period_end,
+            items=items,
+            stripe_invoice_id=stripe_invoice_id,
+        )
+        db.add(db_obj)
+        await db.flush()
+        await db.refresh(db_obj)
+        return db_obj
+    
+    async def get_user_invoices(
+        self,
+        db: AsyncSession,
+        *,
+        user_id: UUID,
+        limit: int = 50,
+    ) -> list[Invoice]:
+        """Get invoices for a user"""
+        result = await db.execute(
+            select(Invoice)
+            .where(Invoice.user_id == user_id)
+            .order_by(Invoice.created_at.desc())
+            .limit(limit)
+        )
+        return list(result.scalars().all())
+    
+    async def get_by_stripe_invoice(
+        self,
+        db: AsyncSession,
+        *,
+        stripe_invoice_id: str,
+    ) -> Optional[Invoice]:
+        """Get invoice by Stripe invoice ID"""
+        result = await db.execute(
+            select(Invoice).where(Invoice.stripe_invoice_id == stripe_invoice_id)
+        )
+        return result.scalar_one_or_none()
+    
+    async def update_status(
+        self,
+        db: AsyncSession,
+        *,
+        invoice: Invoice,
+        status: InvoiceStatus,
+        paid_at: Optional[datetime] = None,
+    ) -> Invoice:
+        """Update invoice status"""
+        invoice.status = status
+        if paid_at:
+            invoice.paid_at = paid_at
+        db.add(invoice)
+        await db.flush()
+        await db.refresh(invoice)
+        return invoice
+
+
 billing = CRUDBilling(Billing)
+usage_log = CRUDUsageLog(UsageLog)
+invoice = CRUDInvoice(Invoice)

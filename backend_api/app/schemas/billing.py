@@ -7,7 +7,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
-from app.models.billing import BillingPlan, BillingStatus
+from app.models.billing import BillingPlan, BillingStatus, UsageType, InvoiceStatus
 
 
 class BillingBase(BaseModel):
@@ -34,15 +34,24 @@ class BillingResponse(BillingBase):
     user_id: UUID
     status: BillingStatus
     stripe_customer_id: Optional[str] = None
+    trial_start: Optional[datetime] = None
+    trial_end: Optional[datetime] = None
     usage_projects: int
     usage_executions: int
     usage_deployments: int
     usage_api_calls: int
+    usage_github_repos: int
+    cost_openai: float
+    cost_docker: float
+    cost_total: float
     limit_projects: int
     limit_executions: int
     limit_deployments: int
+    limit_api_calls: int
+    limit_repos: int
     current_period_start: Optional[datetime] = None
     current_period_end: Optional[datetime] = None
+    auto_renew: bool
     created_at: datetime
 
 
@@ -52,6 +61,10 @@ class UsageResponse(BaseModel):
     executions: int
     deployments: int
     api_calls: int
+    github_repos: int
+    cost_openai: float
+    cost_docker: float
+    cost_total: float
     limits: dict
 
 
@@ -80,6 +93,8 @@ class PlanLimits(BaseModel):
     executions: int
     deployments: int
     team_members: int
+    api_calls: int
+    github_repos: int
     price_monthly: float
     price_yearly: float
     features: list[str]
@@ -88,3 +103,48 @@ class PlanLimits(BaseModel):
 class PlansResponse(BaseModel):
     """Schema for available plans"""
     plans: dict[str, PlanLimits]
+
+
+class UsageLogCreate(BaseModel):
+    """Schema for creating usage log"""
+    user_id: UUID
+    usage_type: UsageType
+    quantity: int
+    cost: float
+    metadata: Optional[dict] = None
+
+
+class UsageLogResponse(BaseModel):
+    """Schema for usage log response"""
+    model_config = ConfigDict(from_attributes=True)
+    
+    id: UUID
+    user_id: UUID
+    usage_type: UsageType
+    quantity: int
+    cost: float
+    metadata: Optional[dict] = None
+    timestamp: datetime
+
+
+class InvoiceResponse(BaseModel):
+    """Schema for invoice response"""
+    model_config = ConfigDict(from_attributes=True)
+    
+    id: UUID
+    user_id: UUID
+    stripe_invoice_id: Optional[str] = None
+    amount: float
+    status: InvoiceStatus
+    period_start: datetime
+    period_end: datetime
+    items: Optional[dict] = None
+    due_date: Optional[datetime] = None
+    paid_at: Optional[datetime] = None
+    created_at: datetime
+
+
+class InvoiceListResponse(BaseModel):
+    """Schema for invoice list response"""
+    invoices: list[InvoiceResponse]
+    total: int
