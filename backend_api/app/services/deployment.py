@@ -4,7 +4,6 @@ Supports Vercel, Railway, and other providers
 """
 import asyncio
 import os
-import json
 import logging
 from typing import Dict, Any, Optional, List
 from uuid import UUID
@@ -138,18 +137,6 @@ class VercelProvider(DeploymentProviderBase):
         try:
             # Create deployment
             # Note: In production, you'd upload files or use Git integration
-            payload = {
-                "name": config.project_name,
-                "target": config.environment,
-                "gitSource": None,  # Would be set for Git-based deploys
-                "projectSettings": {
-                    "buildCommand": config.build_command,
-                    "outputDirectory": config.output_dir,
-                    "framework": config.framework,
-                },
-                "env": config.env_vars,
-            }
-            
             # This is a placeholder - actual Vercel deployment requires
             # either Git integration or file upload via their API
             result.status = DeploymentStatus.QUEUED
@@ -222,7 +209,7 @@ class VercelProvider(DeploymentProviderBase):
                 headers=self._headers()
             )
             return response.status_code == 200
-        except:
+        except Exception:
             return False
 
 

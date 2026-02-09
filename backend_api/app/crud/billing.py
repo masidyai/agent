@@ -280,7 +280,7 @@ class CRUDUsageLog(CRUDBase[UsageLog, UsageLogCreate, None]):
             usage_type=usage_type,
             quantity=quantity,
             cost=cost,
-            metadata=metadata,
+            meta_data=metadata,
         )
         db.add(db_obj)
         await db.flush()

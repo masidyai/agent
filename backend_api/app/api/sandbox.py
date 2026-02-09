@@ -4,7 +4,6 @@ Sandbox execution API endpoints
 import logging
 import time
 from typing import Optional
-from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -12,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
 from app.models.user import User
-from app.services.sandbox import sandbox, SandboxConfig, ExecutionStatus
+from app.services.sandbox import sandbox, SandboxConfig
 from app.core.database import get_db
 from app.services.usage_tracking import usage_tracking
 
