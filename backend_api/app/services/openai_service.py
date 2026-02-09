@@ -234,8 +234,14 @@ Generate only the code, no explanations."""
         return "\n".join(prompt_parts)
     
     def _extract_code_from_response(self, response: str) -> str:
-        """Extract code from markdown code blocks if present"""
-        # Remove markdown code blocks
+        """
+        Extract code from markdown code blocks if present.
+        
+        Note: This uses simple regex matching which may not handle nested backticks
+        in code examples. If no code block is found, returns the full response.
+        """
+        # Remove markdown code blocks - pattern handles most common cases
+        # Note: May not work correctly with triple backticks inside code blocks
         code_block_pattern = r'```(?:\w+)?\n(.*?)```'
         matches = re.findall(code_block_pattern, response, re.DOTALL)
         
@@ -289,8 +295,14 @@ Generate only the code, no explanations."""
 # Singleton instance
 _openai_service: Optional[OpenAIService] = None
 
-def get_openai_service() -> OpenAIService:
-    """Get or create OpenAI service singleton"""
+def get_openai_service() -> Optional[OpenAIService]:
+    """
+    Get or create OpenAI service singleton.
+    
+    Returns:
+        OpenAIService instance if API key is available, None otherwise.
+        When None is returned, callers should fallback to template-based generation.
+    """
     global _openai_service
     if _openai_service is None:
         try:

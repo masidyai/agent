@@ -21,12 +21,7 @@ class AICodeGenerator:
         """Generate all files for a SaaS project using AI"""
         
         if not self.openai_service:
-            # Fallback to templates if OpenAI not available
-            # Import here to avoid circular dependency
-            import sys
-            from pathlib import Path
-            main_path = Path(__file__).parent.parent.parent / "main.py"
-            # We'll use template fallback by returning empty and letting caller handle it
+            # Fallback to templates if OpenAI not available - return empty to let caller handle
             return []
         
         files = []
@@ -366,7 +361,14 @@ SECRET_KEY=your-secret-key-change-in-production''',
 _ai_generator: Optional[AICodeGenerator] = None
 
 def get_ai_generator() -> AICodeGenerator:
-    """Get or create AI code generator singleton"""
+    """
+    Get or create AI code generator singleton.
+    
+    Returns:
+        AICodeGenerator instance. Note that the generator's openai_service
+        may be None if no API key is configured, in which case generation
+        methods will return empty lists and callers should fallback to templates.
+    """
     global _ai_generator
     if _ai_generator is None:
         _ai_generator = AICodeGenerator()

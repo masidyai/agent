@@ -29,6 +29,8 @@ from app.services.openai_service import get_openai_service
 class Config:
     PROJECTS_DIR = Path(__file__).parent / "projects"
     STATE_FILE = Path(__file__).parent.parent / "masidy_agent_runtime" / "memory" / "state.json"
+    # Streaming configuration
+    CODE_CHUNK_SIZE = 50  # Characters per chunk for streaming code display
 
 Config.PROJECTS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -133,13 +135,20 @@ def get_project_files(project_name: str, task_desc: str, flow: str) -> List[Dict
     # This is a sync wrapper for backward compatibility
     # Try to use async AI generation, fallback to templates
     try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            # If we're already in an async context, we can't use run_until_complete
-            # Fall back to templates for now
+        # Check if we're in an async context
+        try:
+            asyncio.get_running_loop()
+            # We're in an async context - can't use run_until_complete
+            # Fall back to templates
             return get_project_files_template(project_name, task_desc, flow)
-        else:
-            return loop.run_until_complete(get_project_files_ai(project_name, task_desc, flow))
+        except RuntimeError:
+            # No running loop - we can create one
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                return loop.run_until_complete(get_project_files_ai(project_name, task_desc, flow))
+            finally:
+                loop.close()
     except Exception as e:
         print(f"Error in AI generation: {e}")
         return get_project_files_template(project_name, task_desc, flow)
@@ -936,9 +945,8 @@ async def stream_execution(execution_id: str):
                     content_to_stream = file_info["content"]
                     
                     # Simulate streaming by chunking the content
-                    chunk_size = 50
-                    for chunk_start in range(0, len(content_to_stream), chunk_size):
-                        chunk = content_to_stream[chunk_start:chunk_start + chunk_size]
+                    for chunk_start in range(0, len(content_to_stream), Config.CODE_CHUNK_SIZE):
+                        chunk = content_to_stream[chunk_start:chunk_start + Config.CODE_CHUNK_SIZE]
                         accumulated_content += chunk
                         yield f"data: {json.dumps({'type': 'code_chunk', 'step': step_num, 'chunk': chunk})}\n\n"
                         await asyncio.sleep(0.02)  # Small delay for visual effect
