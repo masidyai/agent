@@ -1,7 +1,7 @@
 """Add code_executions table for Docker-based code execution
 
-Revision ID: 003
-Revises: 002
+Revision ID: 004
+Revises: 003
 Create Date: 2026-02-09 03:00:00.000000
 
 """
@@ -12,8 +12,8 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = '003'
-down_revision: Union[str, None] = '002'
+revision: str = '004'
+down_revision: Union[str, None] = '003'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
