@@ -51,6 +51,13 @@ class Settings(BaseSettings):
     GITHUB_CLIENT_ID: Optional[str] = None
     GITHUB_CLIENT_SECRET: Optional[str] = None
     
+    # GitHub Integration
+    GITHUB_REDIRECT_URI: str = "http://localhost:3000/auth/github/callback"
+    GITHUB_TOKEN_ENCRYPTION_KEY: str = os.getenv(
+        "GITHUB_TOKEN_ENCRYPTION_KEY",
+        "change-me-32-byte-key-for-encryption"
+    )
+    
     # Stripe
     STRIPE_API_KEY: Optional[str] = None
     STRIPE_WEBHOOK_SECRET: Optional[str] = None

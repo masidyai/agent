@@ -1,11 +1,15 @@
 """
 Security utilities - Password hashing and JWT tokens
 """
+import base64
 from datetime import datetime, timedelta
 from typing import Optional, Any
 
 import bcrypt
 from jose import JWTError, jwt
+from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 from app.core.config import settings
 
@@ -76,3 +80,68 @@ def verify_token(token: str, token_type: str = "access") -> Optional[str]:
         return None
     
     return payload.get("sub")
+
+
+def get_encryption_key() -> bytes:
+    """Get or derive encryption key from settings"""
+    # Use PBKDF2 to derive a proper 32-byte key from the encryption key setting
+    # Note: Using a static salt here since we're deriving the master key from a secret
+    # The actual per-token security comes from Fernet's random IV/nonce
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=b'masidy_github_token_salt',  # Static salt for master key derivation
+        iterations=100000,
+    )
+    key = base64.urlsafe_b64encode(kdf.derive(settings.GITHUB_TOKEN_ENCRYPTION_KEY.encode()))
+    return key
+
+
+def encrypt_token(token: str) -> str:
+    """
+    Encrypt a GitHub token for secure storage.
+    
+    Uses Fernet encryption which provides authenticated encryption with
+    a random 128-bit IV for each encryption operation, ensuring unique
+    ciphertexts even for identical plaintexts.
+    """
+    if not token:
+        return ""
+    
+    try:
+        key = get_encryption_key()
+        f = Fernet(key)
+        # Fernet automatically generates a random IV/nonce for each encryption
+        encrypted = f.encrypt(token.encode())
+        return base64.urlsafe_b64encode(encrypted).decode()
+    except Exception as e:
+        # Log error but don't expose details
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Token encryption failed: {e}")
+        raise ValueError("Failed to encrypt token")
+
+
+def decrypt_token(encrypted_token: str) -> str:
+    """
+    Decrypt a GitHub token from storage.
+    
+    Verifies the authentication tag and decrypts the token.
+    """
+    if not encrypted_token:
+        return ""
+    
+    try:
+        key = get_encryption_key()
+        f = Fernet(key)
+        encrypted_bytes = base64.urlsafe_b64decode(encrypted_token.encode())
+        # Fernet automatically verifies the authentication tag
+        decrypted = f.decrypt(encrypted_bytes)
+        return decrypted.decode()
+    except Exception as e:
+        # Log error but don't expose details
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Token decryption failed: {e}")
+        raise ValueError("Failed to decrypt token")
+
