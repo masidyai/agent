@@ -16,6 +16,8 @@ if TYPE_CHECKING:
     from app.models.team import Team
     from app.models.deployment import Deployment
     from app.models.memory import Memory
+    from app.models.execution import Execution
+    from app.models.project_file import ProjectFile
 
 
 class ProjectStatus(str, Enum):
@@ -85,6 +87,16 @@ class Project(Base):
     )
     memories: Mapped[List["Memory"]] = relationship(
         "Memory",
+        back_populates="project",
+        cascade="all, delete-orphan",
+    )
+    executions: Mapped[List["Execution"]] = relationship(
+        "Execution",
+        back_populates="project",
+        cascade="all, delete-orphan",
+    )
+    files: Mapped[List["ProjectFile"]] = relationship(
+        "ProjectFile",
         back_populates="project",
         cascade="all, delete-orphan",
     )
