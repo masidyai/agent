@@ -455,7 +455,7 @@ class DockerExecutor:
             # Wait for container with timeout
             try:
                 result = await asyncio.wait_for(
-                    loop.run_in_executor(None, container.wait, timeout),
+                    loop.run_in_executor(None, container.wait),
                     timeout=timeout + 5  # Extra buffer
                 )
                 
@@ -510,11 +510,11 @@ class DockerExecutor:
             
             # Stop and remove container
             try:
-                await loop.run_in_executor(None, container.stop, 5)
+                await loop.run_in_executor(None, container.stop)
             except:
                 pass
             
-            await loop.run_in_executor(None, container.remove, True, False)
+            await loop.run_in_executor(None, container.remove)
             logger.debug(f"Container {container.id[:12]} cleaned up")
             
         except Exception as e:
