@@ -1,16 +1,36 @@
-# Docker Sandbox Execution System - Implementation Summary
+# Code Execution System - Implementation Summary
 
 ## Overview
 
-Successfully implemented a complete Docker-based code execution system that safely runs AI-generated projects in isolated containers with comprehensive monitoring, error handling, and resource management.
+Successfully resolved merge conflicts and integrated Docker-based code execution system with the existing project build tracking system. Both systems now coexist, serving different purposes.
+
+## Two Execution Systems
+
+### 1. Project Build Tracking (from main branch)
+- **Model**: `Execution` + `ExecutionStep`
+- **Purpose**: Tracks AI agent building projects step-by-step
+- **Location**: `app/models/execution.py`
+- **API**: Used by `/api/runs` endpoints
+- **Statuses**: PENDING, IN_PROGRESS, COMPLETED, FAILED, STOPPED
+
+### 2. Docker Code Execution (from feature branch)
+- **Model**: `CodeExecution`
+- **Purpose**: Tracks Docker execution of generated code
+- **Location**: `app/models/code_execution.py`
+- **API**: `/api/code-executions` endpoints
+- **Statuses**: PENDING, BUILDING, LINTING, TESTING, RUNNING, SUCCESS, FAILED, TIMEOUT, CANCELLED
+- **Phases**: VALIDATION, BUILD, LINT, TEST, EXECUTION, CLEANUP
 
 ## What Was Built
 
 ### 1. Database Layer
-- **New Model**: `Execution` with 30+ fields tracking all execution phases
-- **Migration**: Added `002_add_executions_table.py` migration script
-- **CRUD Operations**: Full CRUD support with specialized update methods
-- **Relationships**: Linked to projects with cascade delete
+- **Execution Model** (from main): Tracks project generation with ExecutionStep
+- **CodeExecution Model** (new): 30+ fields tracking Docker execution phases
+- **Migrations**: 
+  - `002_add_execution_and_project_file_tables.py` (from main)
+  - `003_add_code_executions_table.py` (new)
+- **CRUD Operations**: Full CRUD support for both models
+- **Relationships**: Both linked to projects with cascade delete
 
 ### 2. Docker Execution Engine
 - **Isolation**: Each execution runs in a separate Docker container
@@ -23,15 +43,15 @@ Successfully implemented a complete Docker-based code execution system that safe
 - **Automatic Cleanup**: Containers removed after execution
 
 ### 3. API Layer
-8 RESTful endpoints:
-1. `GET /api/executions/` - List executions for a project
-2. `POST /api/executions/` - Create a new execution
-3. `GET /api/executions/{id}` - Get execution details
-4. `POST /api/executions/{id}/run` - Start execution (background task)
-5. `GET /api/executions/{id}/logs` - Get combined logs
-6. `GET /api/executions/{id}/results` - Get execution results
-7. `POST /api/executions/{id}/stop` - Stop running execution
-8. `GET /api/executions/{id}/health` - Check execution health
+8 RESTful endpoints for code execution:
+1. `GET /api/code-executions/` - List executions for a project
+2. `POST /api/code-executions/` - Create a new code execution
+3. `GET /api/code-executions/{id}` - Get execution details
+4. `POST /api/code-executions/{id}/run` - Start execution (background task)
+5. `GET /api/code-executions/{id}/logs` - Get combined logs
+6. `GET /api/code-executions/{id}/results` - Get execution results
+7. `POST /api/code-executions/{id}/stop` - Stop running execution
+8. `GET /api/code-executions/{id}/health` - Check execution health
 
 ### 4. Execution Pipeline Phases
 
