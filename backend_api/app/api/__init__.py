@@ -2,7 +2,7 @@
 from fastapi import APIRouter
 
 from app.api import auth, users, teams, projects, billing, deployments, memory
-from app.api import websocket, sandbox, visual_builder, runs
+from app.api import websocket, sandbox, visual_builder, runs, executions
 
 api_router = APIRouter()
 
@@ -15,6 +15,7 @@ api_router.include_router(runs.router, tags=["Runs"])
 api_router.include_router(billing.router, prefix="/billing", tags=["Billing"])
 api_router.include_router(deployments.router, prefix="/deployments", tags=["Deployments"])
 api_router.include_router(memory.router, prefix="/memory", tags=["Memory"])
+api_router.include_router(executions.router, prefix="/executions", tags=["Executions"])
 
 # New advanced features
 api_router.include_router(websocket.router, tags=["WebSocket"])
