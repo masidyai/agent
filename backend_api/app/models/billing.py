@@ -139,7 +139,7 @@ class Billing(Base):
     current_period_end: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     
     # Auto-renewal
-    auto_renew: Mapped[bool] = mapped_column(Integer, default=1)  # SQLite uses INTEGER for BOOLEAN
+    auto_renew: Mapped[bool] = mapped_column(Integer, default=1)
     
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

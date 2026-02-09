@@ -2,6 +2,7 @@
 Sandbox execution API endpoints
 """
 import logging
+import time
 from typing import Optional
 from uuid import UUID
 
@@ -71,7 +72,6 @@ async def execute_command(
     )
     
     # Track start time
-    import time
     start_time = time.time()
     
     result = await sandbox.execute(
@@ -129,7 +129,6 @@ async def execute_code(
     )
     
     # Track start time
-    import time
     start_time = time.time()
     
     result = await sandbox.execute_code(

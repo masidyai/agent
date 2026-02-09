@@ -1,6 +1,7 @@
 """
 Billing API routes
 """
+import json
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Header
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -233,7 +234,7 @@ async def create_checkout_session(
         if not billing.stripe_customer_id:
             customer = stripe.Customer.create(
                 email=current_user.email,
-                name=current_user.name if hasattr(current_user, 'name') else current_user.email,
+                name=getattr(current_user, 'name', current_user.email),
                 metadata={"user_id": str(current_user.id)},
             )
             await crud_billing.billing.update_stripe_info(
@@ -426,7 +427,6 @@ async def stripe_webhook(
                 )
         else:
             # For testing without signature verification
-            import json
             event = json.loads(payload)
         
         # Handle different event types
