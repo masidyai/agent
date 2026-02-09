@@ -272,7 +272,7 @@ class CRUDUsageLog(CRUDBase[UsageLog, UsageLogCreate, None]):
         usage_type: UsageType,
         quantity: int,
         cost: float,
-        metadata: Optional[dict] = None,
+        extra_data: Optional[dict] = None,
     ) -> UsageLog:
         """Create a usage log entry"""
         db_obj = UsageLog(
@@ -280,7 +280,7 @@ class CRUDUsageLog(CRUDBase[UsageLog, UsageLogCreate, None]):
             usage_type=usage_type,
             quantity=quantity,
             cost=cost,
-            metadata=metadata,
+            extra_data=extra_data,
         )
         db.add(db_obj)
         await db.flush()

@@ -8,8 +8,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.crud import project as crud_project
-from app.crud import team as crud_team
-from app.crud import billing as crud_billing
 from app.schemas.project import (
     ProjectCreate,
     ProjectUpdate,
@@ -88,7 +86,7 @@ async def create_project(
         db,
         user_id=current_user.id,
         project_id=project.id,
-        metadata={"name": project.name, "description": project.description},
+        extra_data={"name": project.name, "description": project.description},
     )
     
     return project

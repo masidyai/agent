@@ -111,7 +111,7 @@ class UsageLogCreate(BaseModel):
     usage_type: UsageType
     quantity: int
     cost: float
-    metadata: Optional[dict] = None
+    extra_data: Optional[dict] = None
 
 
 class UsageLogResponse(BaseModel):
@@ -123,7 +123,7 @@ class UsageLogResponse(BaseModel):
     usage_type: UsageType
     quantity: int
     cost: float
-    metadata: Optional[dict] = None
+    extra_data: Optional[dict] = None
     timestamp: datetime
 
 

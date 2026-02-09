@@ -6,7 +6,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional, TYPE_CHECKING
 
-from sqlalchemy import String, DateTime, ForeignKey, Integer, Uuid, Enum as SQLEnum, Float, Text, JSON
+from sqlalchemy import String, DateTime, ForeignKey, Integer, Uuid, Enum as SQLEnum, Float, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -199,8 +199,8 @@ class UsageLog(Base):
     quantity: Mapped[int] = mapped_column(Integer, default=1)  # tokens, minutes, count
     cost: Mapped[float] = mapped_column(Float, default=0.0)
     
-    # Metadata (flexible JSON for usage-specific data)
-    metadata: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    # Extra data (flexible JSON for usage-specific data)
+    extra_data: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     
     timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
     
