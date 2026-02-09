@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 set -e
 
 echo "Starting Masidy Backend API..."
@@ -22,7 +22,6 @@ asyncio.run(check_db())
 
 # Run database migrations
 echo "Running database migrations..."
-cd /app/backend_api
 alembic upgrade head
 
 echo "Starting uvicorn server..."

@@ -77,8 +77,7 @@ USER masidy
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PORT=8000 \
-    DATABASE_URL=sqlite+aiosqlite:///./data/masidy.db \
-    SECRET_KEY=change-this-in-production-use-build-arg \
+    DATABASE_URL=sqlite+aiosqlite:////app/backend_api/data/masidy.db \
     CORS_ORIGINS=http://localhost:3000
 
 EXPOSE 8000
