@@ -25,6 +25,9 @@ from pydantic import BaseModel, Field
 from app.services.ai_code_generator import get_ai_generator
 from app.services.openai_service import get_openai_service
 
+# API Router
+from app.api import api_router
+
 # Configuration
 class Config:
     PROJECTS_DIR = Path(__file__).parent / "projects"
@@ -736,6 +739,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Register API routes
+app.include_router(api_router, prefix="/api/v1")
 
 # ============================================================================
 # API Endpoints

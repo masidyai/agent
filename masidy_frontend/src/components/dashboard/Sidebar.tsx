@@ -22,11 +22,11 @@ const menuItems = [
 ]
 
 const settingsItems = [
-  { icon: User, label: 'Profile', href: '/dashboard/profile' },
+  { icon: User, label: 'Profile', href: '/dashboard/settings/profile' },
   { icon: CreditCard, label: 'Plan & Billing', href: '/dashboard/billing' },
-  { icon: Plug, label: 'Integrations', href: '/dashboard/integrations' },
-  { icon: Key, label: 'API Keys', href: '/dashboard/api-keys' },
-  { icon: Settings, label: 'Settings', href: '/dashboard/settings' },
+  { icon: Plug, label: 'Integrations', href: '/dashboard/settings/integrations' },
+  { icon: Key, label: 'API Keys', href: '/dashboard/settings/api-keys' },
+  { icon: Settings, label: 'Settings', href: '/dashboard/settings/general' },
 ]
 
 export function DashboardSidebar() {

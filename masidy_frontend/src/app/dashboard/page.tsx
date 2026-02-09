@@ -97,8 +97,8 @@ export default function DashboardPage() {
         },
         body: JSON.stringify({
           name: name.toLowerCase().replace(/\s+/g, '_'),
-          description,
-          project_type: template || 'custom',
+          prompt: description,
+          flow: template || 'saas',
         }),
       })
 
