@@ -3,6 +3,7 @@ from fastapi import APIRouter
 
 from app.api import auth, users, teams, projects, billing, deployments, memory
 from app.api import websocket, sandbox, visual_builder, runs, github, code_executions
+from app.chain.identity import router as chain_identity_router
 
 api_router = APIRouter()
 
@@ -17,6 +18,9 @@ api_router.include_router(deployments.router, prefix="/deployments", tags=["Depl
 api_router.include_router(memory.router, prefix="/memory", tags=["Memory"])
 api_router.include_router(code_executions.router, prefix="/code-executions", tags=["Code Executions"])
 api_router.include_router(github.router, prefix="/github", tags=["GitHub"])
+
+# Masidy Chain
+api_router.include_router(chain_identity_router.router, prefix="/chain/identity", tags=["Chain - Identity"])
 
 # New advanced features
 api_router.include_router(websocket.router, tags=["WebSocket"])

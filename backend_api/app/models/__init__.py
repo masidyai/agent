@@ -9,6 +9,10 @@ from app.models.memory import Memory
 from app.models.execution import Execution, ExecutionStep, ExecutionStatus, StepStatus
 from app.models.project_file import ProjectFile
 
+# Chain models
+from app.chain.identity.models import MasidyIdentity, RootKey, DerivedKey, KeyStatus
+from app.chain.events.models import ChainEvent
+
 __all__ = [
     # Models
     "User",
@@ -22,6 +26,11 @@ __all__ = [
     "Execution",
     "ExecutionStep",
     "ProjectFile",
+    # Chain models
+    "MasidyIdentity",
+    "RootKey",
+    "DerivedKey",
+    "ChainEvent",
     # Enums
     "TeamRole",
     "ProjectStatus",
@@ -34,4 +43,5 @@ __all__ = [
     "DeploymentProvider",
     "ExecutionStatus",
     "StepStatus",
+    "KeyStatus",
 ]
