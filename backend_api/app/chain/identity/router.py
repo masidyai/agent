@@ -87,6 +87,24 @@ async def create_identity(
         )
 
 
+@router.get("/me", response_model=MasidyIdentityResponse)
+async def get_my_identity(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Get current user's Masidy Identity
+    """
+    identity = await IdentityService.get_identity_by_user(db, current_user.id)
+    if not identity:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No identity found for current user"
+        )
+    
+    return MasidyIdentityResponse.model_validate(identity)
+
+
 @router.get("/{masidy_id}", response_model=MasidyIdentityResponse)
 async def get_identity(
     masidy_id: str,
@@ -109,24 +127,6 @@ async def get_identity(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to access this identity"
-        )
-    
-    return MasidyIdentityResponse.model_validate(identity)
-
-
-@router.get("/me", response_model=MasidyIdentityResponse)
-async def get_my_identity(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    """
-    Get current user's Masidy Identity
-    """
-    identity = await IdentityService.get_identity_by_user(db, current_user.id)
-    if not identity:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No identity found for current user"
         )
     
     return MasidyIdentityResponse.model_validate(identity)

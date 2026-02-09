@@ -8,6 +8,7 @@ from app.models.deployment import Deployment, DeploymentEnvironment, DeploymentS
 from app.models.memory import Memory
 from app.models.execution import Execution, ExecutionStep, ExecutionStatus, StepStatus
 from app.models.project_file import ProjectFile
+from app.models.code_execution import CodeExecution
 
 # Chain models
 from app.chain.identity.models import MasidyIdentity, RootKey, DerivedKey, KeyStatus
@@ -26,6 +27,7 @@ __all__ = [
     "Execution",
     "ExecutionStep",
     "ProjectFile",
+    "CodeExecution",
     # Chain models
     "MasidyIdentity",
     "RootKey",
