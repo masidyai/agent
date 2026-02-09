@@ -6,8 +6,8 @@ import logging
 from typing import List, Optional, Dict, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends
+from pydantic import BaseModel
 
 from app.api.deps import get_current_user
 from app.models.user import User

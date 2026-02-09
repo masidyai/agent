@@ -20,12 +20,10 @@ from app.schemas.billing import (
     PlansResponse,
     UsageLogResponse,
     InvoiceListResponse,
-    InvoiceResponse,
 )
 from app.api.deps import get_current_user
 from app.models.user import User
 from app.models.billing import BillingPlan, BillingStatus, InvoiceStatus
-from app.services.usage_tracking import usage_tracking
 
 router = APIRouter()
 

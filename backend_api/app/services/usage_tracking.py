@@ -1,7 +1,6 @@
 """
 Usage tracking service for billing and quota enforcement
 """
-from datetime import datetime
 from typing import Optional
 from uuid import UUID
 

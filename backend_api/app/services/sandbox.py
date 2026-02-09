@@ -6,10 +6,8 @@ import os
 import tempfile
 import shutil
 import logging
-import resource
 import signal
-from typing import Dict, Any, Optional, List, Tuple
-from pathlib import Path
+from typing import Dict, Optional, List
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -127,7 +125,8 @@ class SandboxExecutor:
                 start_new_session=True  # Create new process group
             )
             
-            execution_id = str(project_id or id(process))
+            # execution_id could be used for tracking - keeping for potential future use
+            # execution_id = str(project_id or id(process))
             async with self._lock:
                 # Store reference but need to handle Popen vs Process
                 pass
@@ -152,7 +151,7 @@ class SandboxExecutor:
                 # Kill the process group
                 try:
                     os.killpg(os.getpgid(process.pid), signal.SIGKILL)
-                except:
+                except Exception:
                     process.kill()
                 
                 result.status = ExecutionStatus.TIMEOUT
@@ -173,7 +172,7 @@ class SandboxExecutor:
             if not config.working_dir and work_dir and os.path.exists(work_dir):
                 try:
                     shutil.rmtree(work_dir, ignore_errors=True)
-                except:
+                except Exception:
                     pass
         
         return result
@@ -235,7 +234,7 @@ class SandboxExecutor:
             # Cleanup
             try:
                 shutil.rmtree(work_dir, ignore_errors=True)
-            except:
+            except Exception:
                 pass
     
     async def execute_npm_script(
@@ -313,7 +312,7 @@ class SandboxExecutor:
                     os.killpg(os.getpgid(process.pid), signal.SIGKILL)
                     del self.active_processes[execution_id]
                     return True
-                except:
+                except Exception:
                     return False
         return False
 
