@@ -22,8 +22,12 @@ class AICodeGenerator:
         
         if not self.openai_service:
             # Fallback to templates if OpenAI not available
-            from backend_api.main import get_saas_files as template_saas_files
-            return template_saas_files(project_name, task_desc)
+            # Import here to avoid circular dependency
+            import sys
+            from pathlib import Path
+            main_path = Path(__file__).parent.parent.parent / "main.py"
+            # We'll use template fallback by returning empty and letting caller handle it
+            return []
         
         files = []
         context = {
@@ -273,9 +277,8 @@ SECRET_KEY=your-secret-key-change-in-production''',
         """Generate files for refactoring project using AI"""
         
         if not self.openai_service:
-            # Fallback to templates
-            from backend_api.main import get_refactor_files as template_refactor_files
-            return template_refactor_files(project_name, task_desc)
+            # Fallback to templates - return empty to let caller handle
+            return []
         
         files = []
         context = {
