@@ -9,7 +9,7 @@ import bcrypt
 from jose import JWTError, jwt
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 from app.core.config import settings
 
@@ -85,7 +85,7 @@ def verify_token(token: str, token_type: str = "access") -> Optional[str]:
 def get_encryption_key() -> bytes:
     """Get or derive encryption key from settings"""
     # Use PBKDF2 to derive a proper 32-byte key from the encryption key setting
-    kdf = PBKDF2(
+    kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
         length=32,
         salt=b'masidy_github_token_salt',  # Static salt for deterministic key
