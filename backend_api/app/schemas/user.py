@@ -34,6 +34,9 @@ class UserResponse(UserBase):
     is_active: bool
     is_verified: bool
     oauth_provider: Optional[str] = None
+    github_username: Optional[str] = None
+    github_account_linked: bool = False
+    github_public_repos_count: int = 0
     created_at: datetime
 
 
@@ -41,6 +44,8 @@ class UserInDB(UserResponse):
     """Schema for user in database"""
     password_hash: Optional[str] = None
     oauth_id: Optional[str] = None
+    github_token: Optional[str] = None  # Encrypted
+    github_token_expires_at: Optional[datetime] = None
     updated_at: datetime
 
 
