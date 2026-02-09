@@ -19,6 +19,7 @@ from app.schemas.deployment import (
 )
 from app.api.deps import get_current_user
 from app.models.user import User
+from app.services.usage_tracking import usage_tracking
 
 router = APIRouter()
 
@@ -95,14 +96,14 @@ async def trigger_deployment(
             detail="Not authorized",
         )
     
-    # Check billing limits
-    is_ok, current, limit = await crud_billing.check_limit(
-        db, user_id=current_user.id, limit_type="deployments"
+    # Check quota before deployment
+    has_quota, message = await usage_tracking.check_quota(
+        db, user_id=current_user.id, quota_type="deployments"
     )
-    if not is_ok:
+    if not has_quota:
         raise HTTPException(
-            status_code=status.HTTP_402_PAYMENT_REQUIRED,
-            detail=f"Deployment limit reached ({current}/{limit}). Upgrade your plan.",
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=message,
         )
     
     # Create deployment
@@ -115,9 +116,9 @@ async def trigger_deployment(
     )
     
     # Increment billing usage
-    billing = await crud_billing.get_by_user(db, user_id=current_user.id)
+    billing = await crud_billing.billing.get_by_user(db, user_id=current_user.id)
     if billing:
-        await crud_billing.increment_usage(db, billing=billing, deployments=1)
+        await crud_billing.billing.increment_usage(db, billing=billing, deployments=1)
     
     # In a real app, this would trigger an async deployment job
     # For now, we just return the deployment record

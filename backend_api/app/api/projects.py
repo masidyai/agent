@@ -19,6 +19,7 @@ from app.schemas.project import (
 from app.api.deps import get_current_user
 from app.models.user import User
 from app.models.project import ProjectStatus
+from app.services.usage_tracking import usage_tracking
 
 router = APIRouter()
 
@@ -56,14 +57,14 @@ async def create_project(
     current_user: User = Depends(get_current_user),
 ):
     """Create a new project"""
-    # Check billing limits
-    is_ok, current, limit = await crud_billing.check_limit(
-        db, user_id=current_user.id, limit_type="projects"
+    # Check quota before creating project
+    has_quota, message = await usage_tracking.check_quota(
+        db, user_id=current_user.id, quota_type="projects"
     )
-    if not is_ok:
+    if not has_quota:
         raise HTTPException(
-            status_code=status.HTTP_402_PAYMENT_REQUIRED,
-            detail=f"Project limit reached ({current}/{limit}). Upgrade your plan.",
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=message,
         )
     
     # If team_id provided, verify membership
@@ -82,10 +83,13 @@ async def create_project(
         db, obj_in=project_in, user_id=current_user.id
     )
     
-    # Increment billing usage
-    billing = await crud_billing.get_by_user(db, user_id=current_user.id)
-    if billing:
-        await crud_billing.increment_usage(db, billing=billing, projects=1)
+    # Log project creation
+    await usage_tracking.log_project_creation(
+        db,
+        user_id=current_user.id,
+        project_id=project.id,
+        metadata={"name": project.name, "description": project.description},
+    )
     
     return project
 
