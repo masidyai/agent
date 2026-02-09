@@ -16,10 +16,12 @@ api_router.include_router(runs.router, tags=["Runs"])
 api_router.include_router(billing.router, prefix="/billing", tags=["Billing"])
 api_router.include_router(deployments.router, prefix="/deployments", tags=["Deployments"])
 api_router.include_router(memory.router, prefix="/memory", tags=["Memory"])
+api_router.include_router(code_executions.router, prefix="/code-executions", tags=["Code Executions"])
 
 # New advanced features
 api_router.include_router(websocket.router, tags=["WebSocket"])
 api_router.include_router(sandbox.router, tags=["Sandbox"])
 api_router.include_router(visual_builder.router, tags=["Visual Builder"])
+api_router.include_router(github.router, prefix="/github", tags=["GitHub"])
 
 __all__ = ["api_router"]
