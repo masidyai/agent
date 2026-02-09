@@ -26,6 +26,13 @@ const templates = [
   },
 ]
 
+// Template name mapping for better prompts
+const templateNames: Record<string, string> = {
+  saas: 'SaaS Application',
+  api: 'REST API',
+  refactor: 'Project Refactor',
+}
+
 export default function NewProjectPage() {
   const router = useRouter()
   const [step, setStep] = useState(1)
@@ -59,7 +66,7 @@ export default function NewProjectPage() {
         },
         body: JSON.stringify({
           name: project.name.toLowerCase().replace(/\s+/g, '_'),
-          prompt: project.description || `Create a ${project.template} project`,
+          prompt: project.description || `Create a ${templateNames[project.template] || project.template}`,
           flow: project.template,
         }),
       })
