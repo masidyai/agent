@@ -51,17 +51,18 @@ class Settings(BaseSettings):
     GITHUB_CLIENT_ID: Optional[str] = None
     GITHUB_CLIENT_SECRET: Optional[str] = None
     
+    # GitHub Integration
+    GITHUB_REDIRECT_URI: str = "http://localhost:3000/auth/github/callback"
+    GITHUB_TOKEN_ENCRYPTION_KEY: str = os.getenv(
+        "GITHUB_TOKEN_ENCRYPTION_KEY",
+        "change-me-32-byte-key-for-encryption"
+    )
+    
     # Stripe
     STRIPE_API_KEY: Optional[str] = None
     STRIPE_WEBHOOK_SECRET: Optional[str] = None
     STRIPE_PRICE_ID_PRO: Optional[str] = None
     STRIPE_PRICE_ID_TEAM: Optional[str] = None
-    
-    # Usage Tracking & Pricing
-    OPENAI_COST_PER_1K_TOKENS: float = 0.0015
-    DOCKER_COST_PER_MINUTE: float = 0.001
-    GITHUB_STORAGE_PER_REPO: float = 0.10
-    PLATFORM_MARKUP_PERCENT: float = 10.0
     
     # CORS - can be comma-separated string or list
     CORS_ORIGINS: Union[str, list[str]] = "http://localhost:3000,https://masidy.ai"

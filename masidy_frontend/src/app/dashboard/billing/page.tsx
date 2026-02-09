@@ -11,8 +11,6 @@ interface Plan {
   executions: number;
   deployments: number;
   team_members: number;
-  api_calls: number;
-  github_repos: number;
   price_monthly: number;
   price_yearly: number;
   features: string[];
@@ -28,38 +26,18 @@ interface BillingInfo {
   usage_projects: number;
   usage_executions: number;
   usage_deployments: number;
-  usage_api_calls: number;
-  usage_github_repos: number;
   limit_projects: number;
   limit_executions: number;
   limit_deployments: number;
-  limit_api_calls: number;
-  limit_repos: number;
-  cost_openai: number;
-  cost_docker: number;
-  cost_total: number;
-  trial_end: string | null;
   current_period_end: string | null;
-}
-
-interface Invoice {
-  id: string;
-  amount: number;
-  status: string;
-  period_start: string;
-  period_end: string;
-  paid_at: string | null;
-  created_at: string;
 }
 
 export default function BillingPage() {
   const { user, isAuthenticated } = useAuth();
   const [plans, setPlans] = useState<Plans | null>(null);
   const [billing, setBilling] = useState<BillingInfo | null>(null);
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [isYearly, setIsYearly] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [showInvoices, setShowInvoices] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -74,23 +52,12 @@ export default function BillingPage() {
           const tokens = localStorage.getItem('auth_tokens');
           if (tokens) {
             const { access_token } = JSON.parse(tokens);
-            
-            // Fetch billing info
             const billingRes = await fetch(`${API_URL}/api/v1/billing/`, {
               headers: { Authorization: `Bearer ${access_token}` },
             });
             if (billingRes.ok) {
               const billingData = await billingRes.json();
               setBilling(billingData);
-            }
-            
-            // Fetch invoices
-            const invoicesRes = await fetch(`${API_URL}/api/v1/billing/invoices`, {
-              headers: { Authorization: `Bearer ${access_token}` },
-            });
-            if (invoicesRes.ok) {
-              const invoicesData = await invoicesRes.json();
-              setInvoices(invoicesData.invoices || []);
             }
           }
         }
@@ -105,53 +72,8 @@ export default function BillingPage() {
   }, [isAuthenticated]);
 
   const handleUpgrade = async (planName: string) => {
-    if (planName === 'free') return;
-    
-    const tokens = localStorage.getItem('auth_tokens');
-    if (!tokens) {
-      alert('Please log in to upgrade');
-      return;
-    }
-    
-    const { access_token } = JSON.parse(tokens);
-    
-    try {
-      const response = await fetch(`${API_URL}/api/v1/billing/checkout`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${access_token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          plan: planName,
-          success_url: `${window.location.origin}/dashboard/billing?success=true`,
-          cancel_url: `${window.location.origin}/dashboard/billing?canceled=true`,
-        }),
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        window.location.href = data.checkout_url;
-      } else {
-        const error = await response.json();
-        alert(error.detail || 'Failed to create checkout session');
-      }
-    } catch (error) {
-      console.error('Checkout error:', error);
-      alert('Failed to start checkout process');
-    }
-  };
-
-  const formatDate = (dateStr: string | null) => {
-    if (!dateStr) return 'N/A';
-    return new Date(dateStr).toLocaleDateString();
-  };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(amount);
+    // In production, this would redirect to Stripe checkout
+    alert(`Upgrading to ${planName} plan. Stripe integration coming soon!`);
   };
 
   if (isLoading) {
@@ -183,136 +105,48 @@ export default function BillingPage() {
         {/* Current Plan */}
         {billing && (
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-semibold">Current Plan</h2>
-              {billing.trial_end && new Date(billing.trial_end) > new Date() && (
-                <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm">
-                  Trial ends {formatDate(billing.trial_end)}
-                </span>
-              )}
-            </div>
+            <h2 className="text-lg font-semibold mb-4">Current Plan</h2>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
               <div>
                 <p className="text-sm text-gray-500">Plan</p>
                 <p className="text-2xl font-bold capitalize">{billing.plan}</p>
                 <span className={`inline-block px-2 py-1 text-xs rounded-full ${
-                  billing.status === 'active' ? 'bg-green-100 text-green-800' : 
-                  billing.status === 'trialing' ? 'bg-blue-100 text-blue-800' :
-                  'bg-yellow-100 text-yellow-800'
+                  billing.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
                 }`}>
                   {billing.status}
                 </span>
               </div>
               <div>
                 <p className="text-sm text-gray-500">Projects</p>
-                <p className="text-2xl font-bold">{billing.usage_projects} / {billing.limit_projects === -1 ? '∞' : billing.limit_projects}</p>
-                {billing.limit_projects !== -1 && (
-                  <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
-                    <div 
-                      className="bg-black rounded-full h-2" 
-                      style={{ width: `${Math.min((billing.usage_projects / billing.limit_projects) * 100, 100)}%` }}
-                    ></div>
-                  </div>
-                )}
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">API Calls</p>
-                <p className="text-2xl font-bold">{billing.usage_api_calls} / {billing.limit_api_calls === -1 ? '∞' : billing.limit_api_calls}</p>
-                {billing.limit_api_calls !== -1 && (
-                  <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
-                    <div 
-                      className="bg-black rounded-full h-2" 
-                      style={{ width: `${Math.min((billing.usage_api_calls / billing.limit_api_calls) * 100, 100)}%` }}
-                    ></div>
-                  </div>
-                )}
+                <p className="text-2xl font-bold">{billing.usage_projects} / {billing.limit_projects}</p>
+                <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
+                  <div 
+                    className="bg-black rounded-full h-2" 
+                    style={{ width: `${Math.min((billing.usage_projects / billing.limit_projects) * 100, 100)}%` }}
+                  ></div>
+                </div>
               </div>
               <div>
                 <p className="text-sm text-gray-500">Executions</p>
-                <p className="text-2xl font-bold">{billing.usage_executions} / {billing.limit_executions === -1 ? '∞' : billing.limit_executions}</p>
-                {billing.limit_executions !== -1 && (
-                  <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
-                    <div 
-                      className="bg-black rounded-full h-2" 
-                      style={{ width: `${Math.min((billing.usage_executions / billing.limit_executions) * 100, 100)}%` }}
-                    ></div>
-                  </div>
-                )}
+                <p className="text-2xl font-bold">{billing.usage_executions} / {billing.limit_executions}</p>
+                <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
+                  <div 
+                    className="bg-black rounded-full h-2" 
+                    style={{ width: `${Math.min((billing.usage_executions / billing.limit_executions) * 100, 100)}%` }}
+                  ></div>
+                </div>
               </div>
-            </div>
-            
-            {/* Cost tracking */}
-            <div className="mt-6 pt-6 border-t border-gray-200">
-              <h3 className="text-sm font-semibold mb-3">Usage Costs This Period</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <p className="text-xs text-gray-600">OpenAI API</p>
-                  <p className="text-xl font-bold">{formatCurrency(billing.cost_openai)}</p>
-                </div>
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <p className="text-xs text-gray-600">Docker Execution</p>
-                  <p className="text-xl font-bold">{formatCurrency(billing.cost_docker)}</p>
-                </div>
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <p className="text-xs text-gray-600">Total</p>
-                  <p className="text-xl font-bold text-green-600">{formatCurrency(billing.cost_total)}</p>
+              <div>
+                <p className="text-sm text-gray-500">Deployments</p>
+                <p className="text-2xl font-bold">{billing.usage_deployments} / {billing.limit_deployments}</p>
+                <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
+                  <div 
+                    className="bg-black rounded-full h-2" 
+                    style={{ width: `${Math.min((billing.usage_deployments / billing.limit_deployments) * 100, 100)}%` }}
+                  ></div>
                 </div>
               </div>
             </div>
-          </div>
-        )}
-
-        {/* Invoices Section */}
-        {billing && invoices.length > 0 && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-semibold">Billing History</h2>
-              <button
-                onClick={() => setShowInvoices(!showInvoices)}
-                className="text-sm text-gray-600 hover:text-black"
-              >
-                {showInvoices ? 'Hide' : 'Show'} Invoices
-              </button>
-            </div>
-            
-            {showInvoices && (
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead>
-                    <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Period</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Amount</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {invoices.map((invoice) => (
-                      <tr key={invoice.id}>
-                        <td className="px-4 py-3 text-sm text-gray-900">
-                          {formatDate(invoice.created_at)}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-600">
-                          {formatDate(invoice.period_start)} - {formatDate(invoice.period_end)}
-                        </td>
-                        <td className="px-4 py-3 text-sm font-semibold text-gray-900">
-                          {formatCurrency(invoice.amount)}
-                        </td>
-                        <td className="px-4 py-3 text-sm">
-                          <span className={`px-2 py-1 rounded-full text-xs ${
-                            invoice.status === 'paid' ? 'bg-green-100 text-green-800' :
-                            invoice.status === 'open' ? 'bg-yellow-100 text-yellow-800' :
-                            'bg-gray-100 text-gray-800'
-                          }`}>
-                            {invoice.status}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
           </div>
         )}
 

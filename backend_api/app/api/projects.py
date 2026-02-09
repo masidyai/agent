@@ -8,6 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.crud import project as crud_project
+from app.crud import team as crud_team
+from app.crud import billing as crud_billing
 from app.schemas.project import (
     ProjectCreate,
     ProjectUpdate,
@@ -17,7 +19,6 @@ from app.schemas.project import (
 from app.api.deps import get_current_user
 from app.models.user import User
 from app.models.project import ProjectStatus
-from app.services.usage_tracking import usage_tracking
 
 router = APIRouter()
 
@@ -55,14 +56,14 @@ async def create_project(
     current_user: User = Depends(get_current_user),
 ):
     """Create a new project"""
-    # Check quota before creating project
-    has_quota, message = await usage_tracking.check_quota(
-        db, user_id=current_user.id, quota_type="projects"
+    # Check billing limits
+    is_ok, current, limit = await crud_billing.check_limit(
+        db, user_id=current_user.id, limit_type="projects"
     )
-    if not has_quota:
+    if not is_ok:
         raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=message,
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail=f"Project limit reached ({current}/{limit}). Upgrade your plan.",
         )
     
     # If team_id provided, verify membership
@@ -81,13 +82,10 @@ async def create_project(
         db, obj_in=project_in, user_id=current_user.id
     )
     
-    # Log project creation
-    await usage_tracking.log_project_creation(
-        db,
-        user_id=current_user.id,
-        project_id=project.id,
-        metadata={"name": project.name, "description": project.description},
-    )
+    # Increment billing usage
+    billing = await crud_billing.get_by_user(db, user_id=current_user.id)
+    if billing:
+        await crud_billing.increment_usage(db, billing=billing, projects=1)
     
     return project
 

@@ -1,6 +1,7 @@
 """Pytest configuration and fixtures"""
 import asyncio
 import pytest
+import pytest_asyncio
 from typing import AsyncGenerator, Generator
 from httpx import AsyncClient, ASGITransport
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
@@ -20,7 +21,7 @@ def event_loop() -> Generator:
     loop.close()
 
 
-@pytest.fixture(scope="function")
+@pytest_asyncio.fixture(scope="function")
 async def test_db() -> AsyncGenerator:
     """Create test database"""
     engine = create_async_engine(TEST_DATABASE_URL, echo=False)
@@ -48,7 +49,7 @@ async def test_db() -> AsyncGenerator:
     app.dependency_overrides.clear()
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def client(test_db) -> AsyncGenerator:
     """Create test client"""
     transport = ASGITransport(app=app)
@@ -56,7 +57,7 @@ async def client(test_db) -> AsyncGenerator:
         yield ac
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def auth_client(client: AsyncClient) -> AsyncGenerator:
     """Create authenticated test client"""
     # Register a test user

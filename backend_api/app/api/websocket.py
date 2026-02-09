@@ -4,10 +4,10 @@ WebSocket API endpoints for real-time communication
 import logging
 from uuid import UUID
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, Query
 
 from app.services.websocket import manager, handle_websocket, MessageType
-from app.services.multi_agent import orchestrator
+from app.services.multi_agent import orchestrator, AgentRole
 from app.core.security import decode_token
 
 logger = logging.getLogger(__name__)
@@ -41,7 +41,7 @@ async def websocket_endpoint(
     """
     try:
         user_id = await get_user_from_token(token)
-    except Exception:
+    except Exception as e:
         await websocket.close(code=4001, reason="Invalid token")
         return
     
@@ -61,7 +61,7 @@ async def project_websocket(
     """
     try:
         user_id = await get_user_from_token(token)
-    except Exception:
+    except Exception as e:
         await websocket.close(code=4001, reason="Invalid token")
         return
     

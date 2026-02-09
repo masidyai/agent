@@ -72,7 +72,7 @@ class ConnectionManager:
             if user_key in self._connections:
                 try:
                     await self._connections[user_key].websocket.close()
-                except Exception:
+                except:
                     pass
             
             connection = Connection(websocket=websocket, user_id=user_id)

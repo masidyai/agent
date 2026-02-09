@@ -2,18 +2,15 @@
 Sandbox execution API endpoints
 """
 import logging
-import time
 from typing import Optional
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
 from app.models.user import User
-from app.services.sandbox import sandbox, SandboxConfig
-from app.core.database import get_db
-from app.services.usage_tracking import usage_tracking
+from app.services.sandbox import sandbox, SandboxConfig, ExecutionStatus
 
 logger = logging.getLogger(__name__)
 
@@ -48,48 +45,21 @@ class ExecutionResponse(BaseModel):
 @router.post("/execute", response_model=ExecutionResponse)
 async def execute_command(
     request: ExecuteCommandRequest,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
     Execute a command in a sandboxed environment.
     
     Allowed commands: node, npm, npx, python, python3, pip, bun, deno, go, rustc, cargo
     """
-    # Check quota before execution
-    has_quota, message = await usage_tracking.check_quota(
-        db, user_id=current_user.id, quota_type="executions"
-    )
-    if not has_quota:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=message,
-        )
-    
     config = SandboxConfig(
         timeout_seconds=request.timeout
     )
-    
-    # Track start time
-    start_time = time.time()
     
     result = await sandbox.execute(
         command=request.command,
         config=config,
         project_id=request.project_id
-    )
-    
-    # Calculate duration and log usage
-    duration_minutes = (time.time() - start_time) / 60
-    await usage_tracking.log_docker_usage(
-        db,
-        user_id=current_user.id,
-        minutes=duration_minutes,
-        metadata={
-            "command": request.command,
-            "project_id": request.project_id,
-            "exit_code": result.exit_code,
-        },
     )
     
     return ExecutionResponse(
@@ -105,49 +75,22 @@ async def execute_command(
 @router.post("/execute-code", response_model=ExecutionResponse)
 async def execute_code(
     request: ExecuteCodeRequest,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
     Execute source code in a specific language.
     
     Supported languages: python, javascript, typescript, go, rust
     """
-    # Check quota before execution
-    has_quota, message = await usage_tracking.check_quota(
-        db, user_id=current_user.id, quota_type="executions"
-    )
-    if not has_quota:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=message,
-        )
-    
     config = SandboxConfig(
         timeout_seconds=request.timeout
     )
-    
-    # Track start time
-    start_time = time.time()
     
     result = await sandbox.execute_code(
         code=request.code,
         language=request.language,
         config=config,
         project_id=request.project_id
-    )
-    
-    # Calculate duration and log usage
-    duration_minutes = (time.time() - start_time) / 60
-    await usage_tracking.log_docker_usage(
-        db,
-        user_id=current_user.id,
-        minutes=duration_minutes,
-        metadata={
-            "language": request.language,
-            "project_id": request.project_id,
-            "exit_code": result.exit_code,
-        },
     )
     
     return ExecutionResponse(
