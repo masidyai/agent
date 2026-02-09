@@ -18,11 +18,17 @@ def check_file_exists(filepath: str, description: str) -> bool:
 
 def check_import(module_path: str, import_name: str) -> bool:
     """Check if an import works"""
+    import importlib
     try:
+        # Use importlib for safe module importing
+        module = importlib.import_module(module_path)
+        
+        # Verify specific attributes exist if import_name is provided
         if import_name:
-            exec(f"from {module_path} import {import_name}")
-        else:
-            exec(f"import {module_path}")
+            for attr_name in import_name.replace(" ", "").split(","):
+                if not hasattr(module, attr_name):
+                    raise AttributeError(f"{module_path} has no attribute '{attr_name}'")
+        
         print(f"✅ Import works: from {module_path} import {import_name}")
         return True
     except Exception as e:
