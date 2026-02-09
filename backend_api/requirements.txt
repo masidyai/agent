@@ -26,6 +26,9 @@ stripe>=7.0.0
 # WebSockets
 websockets>=12.0
 
+# Docker SDK
+docker>=7.0.0
+
 # Testing
 pytest>=7.4.0
 pytest-asyncio>=0.23.0
