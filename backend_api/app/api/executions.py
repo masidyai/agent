@@ -2,6 +2,7 @@
 Execution API endpoints for running and monitoring code execution
 """
 import logging
+import os
 from uuid import UUID
 from typing import Optional
 import asyncio
@@ -458,7 +459,3 @@ async def get_execution_health(
         is_running=execution.is_running,
         uptime_seconds=uptime_seconds,
     )
-
-
-# Import os for environment variables
-import os

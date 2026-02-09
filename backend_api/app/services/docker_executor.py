@@ -22,6 +22,10 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+# Constants
+MAX_LINT_WARNINGS = 10  # Maximum number of lint warnings to store
+DEFAULT_TEST_COVERAGE = 0.0  # Default coverage when not available
+
 
 class ExecutionPhase(str, Enum):
     """Execution pipeline phases"""
@@ -365,7 +369,7 @@ class DockerExecutor:
         # Parse lint issues
         issues = {}
         if result.get("exit_code") != 0:
-            issues["warnings"] = result.get("output", "").split("\n")[:10]  # First 10 warnings
+            issues["warnings"] = result.get("output", "").split("\n")[:MAX_LINT_WARNINGS]
         
         result["issues"] = issues
         return result
@@ -396,7 +400,9 @@ class DockerExecutor:
         
         result["passed"] = passed
         result["failed"] = failed
-        result["coverage"] = 0.0  # TODO: Parse coverage if available
+        # TODO: Parse coverage from output (pytest --cov or istanbul)
+        # For now, return default coverage
+        result["coverage"] = DEFAULT_TEST_COVERAGE
         
         return result
     
@@ -511,7 +517,7 @@ class DockerExecutor:
             # Stop and remove container
             try:
                 await loop.run_in_executor(None, container.stop)
-            except:
+            except Exception:
                 pass
             
             await loop.run_in_executor(None, container.remove)
