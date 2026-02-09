@@ -23,8 +23,8 @@ def upgrade() -> None:
     op.execute("""
         DO $$ BEGIN
             CREATE TYPE codeexecutionstatus AS ENUM (
-                'PENDING', 'BUILDING', 'LINTING', 'TESTING', 'RUNNING', 
-                'SUCCESS', 'FAILED', 'TIMEOUT', 'CANCELLED'
+                'pending', 'building', 'linting', 'testing', 'running', 
+                'success', 'failed', 'timeout', 'cancelled'
             );
         EXCEPTION
             WHEN duplicate_object THEN null;
@@ -34,7 +34,7 @@ def upgrade() -> None:
     op.execute("""
         DO $$ BEGIN
             CREATE TYPE codeexecutionphase AS ENUM (
-                'VALIDATION', 'BUILD', 'LINT', 'TEST', 'EXECUTION', 'CLEANUP'
+                'validation', 'build', 'lint', 'test', 'execution', 'cleanup'
             );
         EXCEPTION
             WHEN duplicate_object THEN null;
@@ -48,17 +48,8 @@ def upgrade() -> None:
         sa.Column('project_id', sa.UUID(), nullable=False),
         sa.Column('language', sa.String(length=50), nullable=True),
         sa.Column('command', sa.Text(), nullable=True),
-        sa.Column('status', sa.Enum(
-            'PENDING', 'BUILDING', 'LINTING', 'TESTING', 'RUNNING', 
-            'SUCCESS', 'FAILED', 'TIMEOUT', 'CANCELLED',
-            name='codeexecutionstatus',
-            create_type=False
-        ), nullable=False),
-        sa.Column('current_phase', sa.Enum(
-            'VALIDATION', 'BUILD', 'LINT', 'TEST', 'EXECUTION', 'CLEANUP',
-            name='codeexecutionphase',
-            create_type=False
-        ), nullable=True),
+        sa.Column('status', sa.String(), nullable=False),
+        sa.Column('current_phase', sa.String(), nullable=True),
         # Build phase
         sa.Column('build_status', sa.String(length=50), nullable=True),
         sa.Column('build_output', sa.Text(), nullable=True),
@@ -97,6 +88,40 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_code_executions_id'), 'code_executions', ['id'], unique=False)
     op.create_index(op.f('ix_code_executions_project_id'), 'code_executions', ['project_id'], unique=False)
+    
+    # Alter the status and current_phase columns to use the ENUM types
+    # Handle potential case conversion for existing data
+    op.execute("""
+        ALTER TABLE code_executions 
+        ALTER COLUMN status TYPE codeexecutionstatus 
+        USING CASE 
+            WHEN UPPER(status) = 'PENDING' THEN 'pending'::codeexecutionstatus
+            WHEN UPPER(status) = 'BUILDING' THEN 'building'::codeexecutionstatus
+            WHEN UPPER(status) = 'LINTING' THEN 'linting'::codeexecutionstatus
+            WHEN UPPER(status) = 'TESTING' THEN 'testing'::codeexecutionstatus
+            WHEN UPPER(status) = 'RUNNING' THEN 'running'::codeexecutionstatus
+            WHEN UPPER(status) = 'SUCCESS' THEN 'success'::codeexecutionstatus
+            WHEN UPPER(status) = 'FAILED' THEN 'failed'::codeexecutionstatus
+            WHEN UPPER(status) = 'TIMEOUT' THEN 'timeout'::codeexecutionstatus
+            WHEN UPPER(status) = 'CANCELLED' THEN 'cancelled'::codeexecutionstatus
+            ELSE status::codeexecutionstatus
+        END
+    """)
+    
+    op.execute("""
+        ALTER TABLE code_executions 
+        ALTER COLUMN current_phase TYPE codeexecutionphase 
+        USING CASE 
+            WHEN UPPER(current_phase) = 'VALIDATION' THEN 'validation'::codeexecutionphase
+            WHEN UPPER(current_phase) = 'BUILD' THEN 'build'::codeexecutionphase
+            WHEN UPPER(current_phase) = 'LINT' THEN 'lint'::codeexecutionphase
+            WHEN UPPER(current_phase) = 'TEST' THEN 'test'::codeexecutionphase
+            WHEN UPPER(current_phase) = 'EXECUTION' THEN 'execution'::codeexecutionphase
+            WHEN UPPER(current_phase) = 'CLEANUP' THEN 'cleanup'::codeexecutionphase
+            WHEN current_phase IS NULL THEN NULL
+            ELSE current_phase::codeexecutionphase
+        END
+    """)
 
 
 def downgrade() -> None:
