@@ -129,22 +129,27 @@ async def get_project_files_ai(project_name: str, task_desc: str, flow: str) -> 
         else:  # saas
             return await ai_generator.generate_saas_files(project_name, task_desc)
     except Exception as e:
-        print(f"AI generation failed: {e}. Falling back to production mode generation.")
-        # Fallback also uses AI (production mode)
+        print(f"Primary AI generation path failed: {e}. Using alternate AI generation path.")
+        # Both paths use AI - this is just using a different function call path
         return await get_project_files_template(project_name, task_desc, flow)
 
 def get_project_files(project_name: str, task_desc: str, flow: str) -> List[Dict[str, Any]]:
-    """Generate all files for a project based on flow type. (Synchronous wrapper)"""
-    # This is a sync wrapper for backward compatibility
-    # All generation is now AI-powered (production mode)
+    """
+    Generate all files for a project based on flow type. (Synchronous wrapper)
+    
+    DEPRECATED: This is a sync wrapper for backward compatibility only.
+    Use get_project_files_ai(project_name, task_desc, flow) directly in async contexts.
+    All generation now uses OpenAI-powered AI code generation.
+    """
     try:
         # Check if we're in an async context
         try:
             asyncio.get_running_loop()
             # We're in an async context - can't use run_until_complete
-            # This shouldn't happen in normal operation since endpoints are async
-            # But if it does, we need to raise an error
-            raise RuntimeError("Cannot call sync wrapper from async context. Use get_project_files_ai() instead.")
+            raise RuntimeError(
+                "Cannot call sync wrapper from async context. "
+                "Use: await get_project_files_ai(project_name, task_desc, flow) instead."
+            )
         except RuntimeError as e:
             if "Cannot call sync wrapper" in str(e):
                 raise
@@ -152,16 +157,21 @@ def get_project_files(project_name: str, task_desc: str, flow: str) -> List[Dict
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
-                # Use AI generation (which is the same as template now - both use OpenAI)
+                # Use AI generation
                 return loop.run_until_complete(get_project_files_ai(project_name, task_desc, flow))
             finally:
                 loop.close()
     except Exception as e:
-        print(f"Error in AI generation: {e}")
+        print(f"Error in sync wrapper for AI generation: {e}")
         raise  # Re-raise to ensure caller knows about the error
 
 async def get_project_files_template(project_name: str, task_desc: str, flow: str) -> List[Dict[str, Any]]:
-    """Live OpenAI-based file generation (production mode)."""
+    """
+    Generate project files using OpenAI-powered AI code generation.
+    
+    Requires OPENAI_API_KEY environment variable to be set.
+    Raises an exception if the API key is not configured.
+    """
     
     if flow == "refactor":
         return await get_refactor_files(project_name, task_desc)
