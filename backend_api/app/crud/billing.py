@@ -18,7 +18,7 @@ PRICING_CONFIG = {
     "openai_cost_per_1k_tokens": 0.0015,
     "docker_cost_per_minute": 0.001,
     "github_storage_per_repo": 0.10,
-    "platform_markup_percent": 20,
+    "platform_markup_percent": 10,
 }
 
 
