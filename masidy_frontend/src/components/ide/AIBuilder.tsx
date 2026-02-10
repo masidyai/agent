@@ -133,57 +133,33 @@ export function AIBuilder({
       })
       
       setAwaitingConfirmation(true)
-    } catch (error) {
-      console.error('API error, using fallback:', error)
+    } catch (error: unknown) {
+      console.error('API error:', error)
       
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-      const plan = generateLocalPlan(prompt, flow)
-      setCurrentPlan(plan)
-
+      // Show the actual error instead of falling back to demo mode
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
+      
+      // Check if it's an API key error
+      const isApiKeyError = errorMessage.includes('OpenAI') || 
+                           errorMessage.includes('API key') || 
+                           errorMessage.includes('503')
+      
       updateLastMessage({
-        content: `I've analyzed your request. Here's my plan (demo mode):`,
-        type: 'plan',
-        plan: plan,
+        content: isApiKeyError 
+          ? `❌ **OpenAI API Key Required**\n\nTo generate real projects, you need to configure your OpenAI API key:\n\n1. Add \`OPENAI_API_KEY=sk-your-key\` to your \`.env\` file\n2. Restart the backend server\n3. Try again\n\nGet your API key at: https://platform.openai.com/api-keys`
+          : `❌ **Error**: ${errorMessage}\n\nPlease check the backend server is running and try again.`,
+        type: 'error',
       })
       
-      setAwaitingConfirmation(true)
+      setIsThinking(false)
+      return
     }
 
     setIsThinking(false)
   }
 
-  const generateLocalPlan = (prompt: string, flowType: string): PlanStep[] => {
-    const basePlans: Record<string, PlanStep[]> = {
-      saas: [
-        { id: 1, description: 'Create project structure', status: 'pending' },
-        { id: 2, description: 'Set up FastAPI backend', status: 'pending' },
-        { id: 3, description: 'Configure database', status: 'pending' },
-        { id: 4, description: 'Implement authentication', status: 'pending' },
-        { id: 5, description: 'Create API endpoints', status: 'pending' },
-        { id: 6, description: 'Add Docker configuration', status: 'pending' },
-        { id: 7, description: 'Create CI/CD pipeline', status: 'pending' },
-        { id: 8, description: 'Write tests', status: 'pending' },
-        { id: 9, description: 'Generate documentation', status: 'pending' },
-      ],
-      api: [
-        { id: 1, description: 'Create project structure', status: 'pending' },
-        { id: 2, description: 'Initialize FastAPI application', status: 'pending' },
-        { id: 3, description: 'Set up database models', status: 'pending' },
-        { id: 4, description: 'Create CRUD endpoints', status: 'pending' },
-        { id: 5, description: 'Add input validation', status: 'pending' },
-        { id: 6, description: 'Write tests', status: 'pending' },
-        { id: 7, description: 'Add Docker setup', status: 'pending' },
-      ],
-      refactor: [
-        { id: 1, description: 'Analyze codebase', status: 'pending' },
-        { id: 2, description: 'Create Dockerfile', status: 'pending' },
-        { id: 3, description: 'Add docker-compose', status: 'pending' },
-        { id: 4, description: 'Set up CI/CD', status: 'pending' },
-        { id: 5, description: 'Generate README', status: 'pending' },
-      ],
-    }
-    return basePlans[flowType] || basePlans.saas
-  }
+  // REMOVED: generateLocalPlan function - no more demo mode fallback
+  // All project generation now requires real OpenAI API
 
   const confirmPlan = async () => {
     setAwaitingConfirmation(false)
@@ -192,7 +168,7 @@ export function AIBuilder({
 
     addMessage({
       role: 'assistant',
-      content: '🚀 Starting execution...',
+      content: '🚀 Starting AI code generation...',
       type: 'executing',
     })
 
@@ -205,7 +181,7 @@ export function AIBuilder({
           setIsExecuting(false)
           addMessage({
             role: 'system',
-            content: `❌ Error: ${error.message}`,
+            content: `❌ Error: ${error.message}\n\nMake sure the backend server is running with a valid OpenAI API key.`,
             type: 'error',
           })
         },
@@ -215,7 +191,13 @@ export function AIBuilder({
       )
       cleanupRef.current = cleanup
     } else {
-      await runLocalExecution()
+      // No execution ID means the API failed - show error instead of demo mode
+      setIsExecuting(false)
+      addMessage({
+        role: 'system',
+        content: '❌ Cannot start execution: No execution ID. Please try creating a new project.',
+        type: 'error',
+      })
     }
   }
 
@@ -298,49 +280,8 @@ export function AIBuilder({
     }
   }
 
-  const runLocalExecution = async () => {
-    if (!currentPlan) return
-    
-    const files: string[] = []
-    
-    for (let i = 0; i < currentPlan.length; i++) {
-      const step = currentPlan[i]
-      
-      setCurrentPlan((prev) => {
-        if (!prev) return prev
-        const updated = [...prev]
-        updated[i] = { ...updated[i], status: 'executing' }
-        return updated
-      })
-
-      updateLastMessage({
-        content: `⚡ Executing step ${i + 1}/${currentPlan.length}: ${step.description}`,
-      })
-
-      await new Promise((resolve) => setTimeout(resolve, 500 + Math.random() * 300))
-
-      const mockFile = `project/${step.description.toLowerCase().replace(/\s+/g, '_')}.py`
-      files.push(mockFile)
-      onFileCreated?.(mockFile, `# ${step.description}\n# Generated by Masidy`, 'python')
-
-      setCurrentPlan((prev) => {
-        if (!prev) return prev
-        const updated = [...prev]
-        updated[i] = { ...updated[i], status: 'completed' }
-        return updated
-      })
-    }
-
-    setIsExecuting(false)
-    
-    addMessage({
-      role: 'assistant',
-      content: `✅ Project complete! ${files.length} files created (demo mode).\n\nYour project is ready!`,
-      type: 'complete',
-    })
-
-    onExecutionComplete?.(files)
-  }
+  // REMOVED: runLocalExecution function - no more demo mode
+  // All code generation now requires real OpenAI API connection
 
   const cancelExecution = () => {
     if (cleanupRef.current) {
