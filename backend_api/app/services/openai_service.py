@@ -301,14 +301,18 @@ def get_openai_service() -> Optional[OpenAIService]:
     
     Returns:
         OpenAIService instance if API key is available, None otherwise.
-        When None is returned, callers should fallback to template-based generation.
+        
+    Note:
+        When None is returned, callers should raise an appropriate error
+        as template/demo fallback is no longer supported.
+        All code generation requires a valid OpenAI API key.
     """
     global _openai_service
     if _openai_service is None:
         try:
             _openai_service = OpenAIService()
         except ValueError as e:
-            # If no API key, return None - will fallback to templates
-            print(f"Warning: {e}. Will use template fallback.")
+            # If no API key, return None - caller must handle the error
+            print(f"Warning: {e}. Code generation will not be available without OpenAI API key.")
             return None
     return _openai_service

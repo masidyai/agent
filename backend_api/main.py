@@ -118,20 +118,50 @@ def generate_project_name(prompt: str) -> str:
 # ============================================================================
 
 async def get_project_files_ai(project_name: str, task_desc: str, flow: str) -> List[Dict[str, Any]]:
-    """Generate all files for a project using AI."""
-    ai_generator = get_ai_generator()
+    """
+    Generate all files for a project using AI.
     
-    try:
-        if flow == "refactor":
-            return await ai_generator.generate_refactor_files(project_name, task_desc)
-        elif flow == "api":
-            return await ai_generator.generate_api_files(project_name, task_desc)
-        else:  # saas
-            return await ai_generator.generate_saas_files(project_name, task_desc)
-    except Exception as e:
-        print(f"Primary AI generation path failed: {e}. Using alternate AI generation path.")
-        # Both paths use AI - this is just using a different function call path
-        return await get_project_files_template(project_name, task_desc, flow)
+    This function REQUIRES a valid OpenAI API key to work.
+    It will raise an exception if the API key is not configured.
+    
+    Args:
+        project_name: Name of the project
+        task_desc: Description of the task/project
+        flow: Flow type ('saas', 'api', or 'refactor')
+    
+    Returns:
+        List of file dictionaries with path, content, and metadata
+    
+    Raises:
+        ValueError: If OpenAI API key is not configured
+        Exception: If AI generation fails
+    """
+    ai_generator = get_ai_generator()
+    openai_service = get_openai_service()
+    
+    # Enforce OpenAI API key requirement - no demo/template fallback
+    if openai_service is None:
+        raise ValueError(
+            "OpenAI API key is required for project generation. "
+            "Please set the OPENAI_API_KEY environment variable to enable live AI code generation."
+        )
+    
+    if flow == "refactor":
+        files = await ai_generator.generate_refactor_files(project_name, task_desc)
+    elif flow == "api":
+        files = await ai_generator.generate_api_files(project_name, task_desc)
+    else:  # saas
+        files = await ai_generator.generate_saas_files(project_name, task_desc)
+    
+    # Validate that files were actually generated
+    if not files:
+        raise Exception(
+            f"AI generation returned no files for {flow} project '{project_name}'. "
+            "This may indicate an issue with the OpenAI API or the generation prompt."
+        )
+    
+    print(f"✅ Generated {len(files)} files using OpenAI for {flow} project '{project_name}'")
+    return files
 
 def get_project_files(project_name: str, task_desc: str, flow: str) -> List[Dict[str, Any]]:
     """
@@ -140,6 +170,10 @@ def get_project_files(project_name: str, task_desc: str, flow: str) -> List[Dict
     DEPRECATED: This is a sync wrapper for backward compatibility only.
     Use get_project_files_ai(project_name, task_desc, flow) directly in async contexts.
     All generation now uses OpenAI-powered AI code generation.
+    
+    Raises:
+        ValueError: If OpenAI API key is not configured
+        RuntimeError: If called from an async context
     """
     try:
         # Check if we're in an async context
@@ -157,28 +191,16 @@ def get_project_files(project_name: str, task_desc: str, flow: str) -> List[Dict
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
-                # Use AI generation
+                # Use AI generation - requires OpenAI API key
                 return loop.run_until_complete(get_project_files_ai(project_name, task_desc, flow))
             finally:
                 loop.close()
+    except ValueError as e:
+        # Re-raise ValueError for missing API key
+        raise
     except Exception as e:
         print(f"Error in sync wrapper for AI generation: {e}")
         raise  # Re-raise to ensure caller knows about the error
-
-async def get_project_files_template(project_name: str, task_desc: str, flow: str) -> List[Dict[str, Any]]:
-    """
-    Generate project files using OpenAI-powered AI code generation.
-    
-    Requires OPENAI_API_KEY environment variable to be set.
-    Raises an exception if the API key is not configured.
-    """
-    
-    if flow == "refactor":
-        return await get_refactor_files(project_name, task_desc)
-    elif flow == "api":
-        return await get_api_files(project_name, task_desc)
-    else:  # saas
-        return await get_saas_files(project_name, task_desc)
 
 async def get_saas_files(project_name: str, task_desc: str) -> List[Dict[str, Any]]:
     """Generate files for a SaaS project using OpenAI (production mode)."""
@@ -321,15 +343,27 @@ async def get_project(project_id: str):
 
 @app.post("/api/plan")
 async def generate_plan(request: PlanRequest):
-    """Generate execution plan without creating a project."""
+    """
+    Generate execution plan without creating a project.
+    
+    Requires OpenAI API key to be configured.
+    """
     name = generate_project_name(request.prompt)
     
-    # Use async AI generation for plan
+    # Use AI generation - requires OpenAI API key
     try:
         files = await get_project_files_ai(name, request.prompt, request.flow)
+    except ValueError as e:
+        # Missing API key - return error to client
+        raise HTTPException(
+            status_code=503,
+            detail=str(e)
+        )
     except Exception as e:
-        # Fallback also uses AI (production mode)
-        files = await get_project_files_template(name, request.prompt, request.flow)
+        raise HTTPException(
+            status_code=500,
+            detail=f"AI generation failed: {str(e)}"
+        )
     
     steps = [
         PlanStep(id=f["step"], description=f["description"], tool_name="write_file", file_path=f["path"])
@@ -346,7 +380,11 @@ async def generate_plan(request: PlanRequest):
 
 @app.post("/api/projects/{project_id}/plan")
 async def get_execution_plan(project_id: str):
-    """Generate execution plan for a project."""
+    """
+    Generate execution plan for a project.
+    
+    Requires OpenAI API key to be configured.
+    """
     project = projects_db.get(project_id)
     if not project:
         state = load_state()
@@ -358,11 +396,19 @@ async def get_execution_plan(project_id: str):
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
-    # Use async AI generation
+    # Use AI generation - requires OpenAI API key
     try:
         files = await get_project_files_ai(project["name"], project["prompt"], project["flow"])
+    except ValueError as e:
+        raise HTTPException(
+            status_code=503,
+            detail=str(e)
+        )
     except Exception as e:
-        files = await get_project_files_template(project["name"], project["prompt"], project["flow"])
+        raise HTTPException(
+            status_code=500,
+            detail=f"AI generation failed: {str(e)}"
+        )
     
     steps = [
         PlanStep(id=f["step"], description=f["description"], tool_name="write_file", file_path=f["path"])
@@ -402,7 +448,11 @@ async def start_execution(project_id: str):
 
 @app.get("/api/executions/{execution_id}/stream")
 async def stream_execution(execution_id: str):
-    """Stream execution progress via Server-Sent Events with real AI code generation."""
+    """
+    Stream execution progress via Server-Sent Events with real AI code generation.
+    
+    Requires OpenAI API key to be configured for live project generation.
+    """
     
     async def generate():
         execution = executions_db.get(execution_id)
@@ -421,48 +471,43 @@ async def stream_execution(execution_id: str):
         yield f"data: {json.dumps({'type': 'thinking', 'message': 'Initializing AI code generation...'})}\n\n"
         await asyncio.sleep(0.5)
         
-        # Get AI generator
-        ai_generator = get_ai_generator()
+        # Check if OpenAI API key is configured - required for live generation
         openai_service = get_openai_service()
-        use_ai = openai_service is not None
+        if openai_service is None:
+            yield f"data: {json.dumps({'type': 'error', 'message': 'OpenAI API key is required for project generation. Please set the OPENAI_API_KEY environment variable.'})}\n\n"
+            return
         
-        if use_ai:
-            yield f"data: {json.dumps({'type': 'planning', 'message': 'AI is analyzing your requirements...'})}\n\n"
-        else:
-            yield f"data: {json.dumps({'type': 'planning', 'message': 'Using template generation (no OpenAI API key)...'})}\n\n"
-        
+        yield f"data: {json.dumps({'type': 'planning', 'message': 'AI is analyzing your requirements...'})}\n\n"
         await asyncio.sleep(0.5)
         
-        # Generate files using AI
+        # Generate files using AI - requires OpenAI API key
         try:
-            if use_ai:
-                files = await get_project_files_ai(project["name"], project["prompt"], project["flow"])
-            else:
-                files = await get_project_files_template(project["name"], project["prompt"], project["flow"])
+            files = await get_project_files_ai(project["name"], project["prompt"], project["flow"])
+        except ValueError as e:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+            return
         except Exception as e:
-            yield f"data: {json.dumps({'type': 'error', 'message': f'File generation failed: {str(e)}'})}\n\n"
+            yield f"data: {json.dumps({'type': 'error', 'message': f'AI generation failed: {str(e)}'})}\n\n"
             return
         
         yield f"data: {json.dumps({'type': 'planning', 'message': f'Generated plan for {len(files)} files...'})}\n\n"
         await asyncio.sleep(0.3)
         
-        # Create each file with streaming if using AI
+        # Create each file with streaming (AI-generated content)
         created_files = []
         for i, file_info in enumerate(files):
             step_num = i + 1
             
             yield f"data: {json.dumps({'type': 'step_start', 'step': step_num, 'total': len(files), 'description': file_info['description']})}\n\n"
             
-            # If using AI and it's a code file, stream the generation
-            if use_ai and file_info.get('language') in ['python', 'javascript', 'typescript']:
-                # Stream code generation token by token
+            # Stream code file generation for better UX
+            if file_info.get('language') in ['python', 'javascript', 'typescript']:
+                # Stream code generation chunk by chunk
                 accumulated_content = ""
                 try:
-                    # For now, we already have the content from batch generation
-                    # In a future enhancement, this could stream token-by-token
                     content_to_stream = file_info["content"]
                     
-                    # Simulate streaming by chunking the content
+                    # Stream by chunking the content for visual effect
                     for chunk_start in range(0, len(content_to_stream), Config.CODE_CHUNK_SIZE):
                         chunk = content_to_stream[chunk_start:chunk_start + Config.CODE_CHUNK_SIZE]
                         accumulated_content += chunk
@@ -503,8 +548,7 @@ async def stream_execution(execution_id: str):
                 break
         save_state(state)
         
-        completion_message = "Project created successfully with AI-generated code!" if use_ai else "Project created successfully!"
-        yield f"data: {json.dumps({'type': 'complete', 'message': completion_message, 'files_created': created_files, 'total_files': len(created_files)})}\n\n"
+        yield f"data: {json.dumps({'type': 'complete', 'message': 'Project created successfully with AI-generated code!', 'files_created': created_files, 'total_files': len(created_files)})}\n\n"
     
     return StreamingResponse(
         generate(),
@@ -514,17 +558,29 @@ async def stream_execution(execution_id: str):
 
 @app.post("/api/plan-and-execute")
 async def plan_and_execute(request: PlanRequest):
-    """Plan and start execution in one call - returns execution ID for streaming."""
+    """
+    Plan and start execution in one call - returns execution ID for streaming.
+    
+    Requires OpenAI API key to be configured.
+    """
     # Create project
     project_id = str(uuid.uuid4())[:8]
     name = generate_project_name(request.prompt)
     
-    # Generate files using AI
+    # Generate files using AI - requires OpenAI API key
     try:
         files = await get_project_files_ai(name, request.prompt, request.flow)
+    except ValueError as e:
+        # Missing API key - return error
+        raise HTTPException(
+            status_code=503,
+            detail=str(e)
+        )
     except Exception as e:
-        print(f"AI generation failed in plan_and_execute: {e}")
-        files = await get_project_files_template(name, request.prompt, request.flow)
+        raise HTTPException(
+            status_code=500,
+            detail=f"AI generation failed: {str(e)}"
+        )
     
     project = {
         "id": project_id,

@@ -1,6 +1,10 @@
 """
 AI-Powered Code Generator
-Generates project files using OpenAI instead of hardcoded templates
+
+Generates project files using OpenAI API for real, production-ready code.
+This module requires a valid OPENAI_API_KEY environment variable to function.
+
+NO DEMO/TEMPLATE FALLBACK - All generation is done via live AI calls.
 """
 import asyncio
 from typing import List, Dict, Any, Optional
@@ -8,21 +12,45 @@ from app.services.openai_service import get_openai_service
 
 
 class AICodeGenerator:
-    """Generate project code using AI"""
+    """
+    Generate project code using AI.
+    
+    REQUIRES: OPENAI_API_KEY environment variable to be set.
+    
+    This class generates real, production-ready code using OpenAI's API.
+    It does NOT fall back to hardcoded templates or demo content.
+    """
     
     def __init__(self):
         self.openai_service = get_openai_service()
+    
+    def _check_openai_available(self):
+        """Check if OpenAI service is available, raise error if not."""
+        if not self.openai_service:
+            raise ValueError(
+                "OpenAI API key is required for code generation. "
+                "Please set the OPENAI_API_KEY environment variable."
+            )
     
     async def generate_saas_files(
         self,
         project_name: str,
         task_desc: str
     ) -> List[Dict[str, Any]]:
-        """Generate all files for a SaaS project using AI"""
+        """
+        Generate all files for a SaaS project using AI.
         
-        if not self.openai_service:
-            # Fallback to templates if OpenAI not available - return empty to let caller handle
-            return []
+        Args:
+            project_name: Name of the project
+            task_desc: Description of the SaaS application to build
+            
+        Returns:
+            List of file dictionaries with path, content, and metadata
+            
+        Raises:
+            ValueError: If OpenAI API key is not configured
+        """
+        self._check_openai_available()
         
         files = []
         context = {
@@ -260,7 +288,19 @@ SECRET_KEY=your-secret-key-change-in-production''',
         project_name: str,
         task_desc: str
     ) -> List[Dict[str, Any]]:
-        """Generate files for API-only project using AI"""
+        """
+        Generate files for API-only project using AI.
+        
+        Args:
+            project_name: Name of the project
+            task_desc: Description of the API to build
+            
+        Returns:
+            List of file dictionaries with path, content, and metadata
+            
+        Raises:
+            ValueError: If OpenAI API key is not configured
+        """
         # For API flow, generate similar to SaaS but without frontend
         return await self.generate_saas_files(project_name, task_desc)
     
@@ -269,11 +309,20 @@ SECRET_KEY=your-secret-key-change-in-production''',
         project_name: str,
         task_desc: str
     ) -> List[Dict[str, Any]]:
-        """Generate files for refactoring project using AI"""
+        """
+        Generate files for refactoring project using AI.
         
-        if not self.openai_service:
-            # Fallback to templates - return empty to let caller handle
-            return []
+        Args:
+            project_name: Name of the project
+            task_desc: Description of the refactoring task
+            
+        Returns:
+            List of file dictionaries with path, content, and metadata
+            
+        Raises:
+            ValueError: If OpenAI API key is not configured
+        """
+        self._check_openai_available()
         
         files = []
         context = {
@@ -365,9 +414,12 @@ def get_ai_generator() -> AICodeGenerator:
     Get or create AI code generator singleton.
     
     Returns:
-        AICodeGenerator instance. Note that the generator's openai_service
-        may be None if no API key is configured, in which case generation
-        methods will return empty lists and callers should fallback to templates.
+        AICodeGenerator instance.
+        
+    Note:
+        The generator requires OPENAI_API_KEY to be set in the environment.
+        If not configured, generation methods will raise ValueError
+        instead of falling back to templates.
     """
     global _ai_generator
     if _ai_generator is None:

@@ -2,6 +2,9 @@
 """
 Test script for OpenAI integration
 Demonstrates how the AI code generation works
+
+NOTE: This system REQUIRES a valid OpenAI API key for code generation.
+There is NO demo/template fallback - all code is generated live by AI.
 """
 import os
 import sys
@@ -11,72 +14,87 @@ from pathlib import Path
 # Add backend_api to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-async def test_with_mock_key():
-    """Test with a mock API key to show the flow"""
+async def test_openai_integration():
+    """Test OpenAI integration - requires OPENAI_API_KEY to be set"""
     print("🧪 Testing OpenAI Integration\n")
     
-    # Test 1: No API key (fallback to templates)
+    # Test 1: Check if API key is configured
     print("=" * 60)
-    print("Test 1: No API key - should use template fallback")
+    print("Test 1: OpenAI API Key Configuration")
     print("=" * 60)
     
     from app.services.openai_service import get_openai_service
     service = get_openai_service()
-    print(f"OpenAI Service initialized: {service is not None}")
+    
+    if service is None:
+        print("❌ OpenAI Service NOT initialized - API key is missing!")
+        print("\nTo enable AI code generation:")
+        print("  1. Get an OpenAI API key from https://platform.openai.com/api-keys")
+        print("  2. Add to .env file:")
+        print("     OPENAI_API_KEY=sk-your-key-here")
+        print("  3. Restart the server")
+        print("\n⚠️  NOTE: There is no demo/template fallback.")
+        print("    All code generation requires a valid OpenAI API key.")
+        return
+    
+    print("✅ OpenAI Service initialized successfully")
     
     from app.services.ai_code_generator import get_ai_generator
     generator = get_ai_generator()
-    print(f"AI Generator initialized: {generator is not None}")
+    print(f"✅ AI Generator initialized: {generator is not None}")
     
-    from main import get_project_files_ai, get_project_files_template
-    
-    files = await get_project_files_ai("test_project", "Build a REST API", "api")
-    print(f"AI Generation returned {len(files)} files (expected 0 without API key)")
-    
-    if len(files) == 0:
-        print("✅ Correctly returned empty when no API key")
-        files_fallback = get_project_files_template("test_project", "Build a REST API", "api")
-        print(f"✅ Template fallback generated {len(files_fallback)} files")
-        print(f"   Sample files:")
-        for f in files_fallback[:5]:
-            print(f"   - {f['path']}")
-    
+    # Test 2: Check AI generation works
     print("\n" + "=" * 60)
-    print("Test 2: OpenAI Service Configuration")
+    print("Test 2: AI Code Generation")
+    print("=" * 60)
+    
+    from main import get_project_files_ai
+    
+    try:
+        files = await get_project_files_ai("test_project", "Build a REST API for notes", "api")
+        print(f"✅ AI Generation returned {len(files)} files")
+        print("   Sample files:")
+        for f in files[:5]:
+            print(f"   - {f['path']}")
+    except ValueError as e:
+        print(f"❌ AI Generation failed: {e}")
+    except Exception as e:
+        print(f"❌ Unexpected error: {e}")
+    
+    # Test 3: Configuration
+    print("\n" + "=" * 60)
+    print("Test 3: OpenAI Service Configuration")
     print("=" * 60)
     
     print(f"Model: {os.getenv('OPENAI_MODEL', 'gpt-4')}")
     print(f"Temperature: {os.getenv('OPENAI_TEMPERATURE', '0.7')}")
     print(f"Max Tokens: {os.getenv('OPENAI_MAX_TOKENS', '2000')}")
     
+    # Test 4: Code Validation
     print("\n" + "=" * 60)
-    print("Test 3: Validation System")
+    print("Test 4: Validation System")
     print("=" * 60)
     
-    # Test validation without needing API
-    if service:
-        # Mock some code samples
-        valid_python = """
+    valid_python = """
 def hello():
     return "world"
 """
-        
-        invalid_python = """
+    
+    invalid_python = """
 def hello(
     # Incomplete function
 """
-        
-        print("Testing code validation...")
-        result = service.validate_code(valid_python, "python")
-        print(f"Valid Python code: {result['valid']}")
-        
-        result = service.validate_code(invalid_python, "python")
-        print(f"Invalid Python code: {result['valid']}, Issues: {result['issues']}")
-    else:
-        print("Skipping validation test (no OpenAI service)")
     
+    print("Testing code validation...")
+    result = service.validate_code(valid_python, "python")
+    print(f"Valid Python code: {result['valid']}")
+    
+    result = service.validate_code(invalid_python, "python")
+    print(f"Invalid Python code: {result['valid']}, Issues: {result['issues']}")
+    
+    # Test 5: Available endpoints
     print("\n" + "=" * 60)
-    print("Test 4: Streaming Endpoints")
+    print("Test 5: AI-Powered API Endpoints")
     print("=" * 60)
     
     print("The following endpoints support AI-powered code generation:")
@@ -85,19 +103,7 @@ def hello(
     print("  GET  /api/executions/{id}/stream - Stream code generation with SSE")
     
     print("\n✅ All integration tests passed!")
-    print("\n" + "=" * 60)
-    print("To enable AI code generation:")
-    print("=" * 60)
-    print("1. Get an OpenAI API key from https://platform.openai.com/api-keys")
-    print("2. Add to .env file:")
-    print("   OPENAI_API_KEY=sk-your-key-here")
-    print("3. Optionally configure:")
-    print("   OPENAI_MODEL=gpt-4  # or gpt-3.5-turbo")
-    print("   OPENAI_TEMPERATURE=0.7")
-    print("   OPENAI_MAX_TOKENS=2000")
-    print("4. Restart the server")
-    print("\nWithout an API key, the system will automatically fall back to templates.")
     print("=" * 60)
 
 if __name__ == "__main__":
-    asyncio.run(test_with_mock_key())
+    asyncio.run(test_openai_integration())

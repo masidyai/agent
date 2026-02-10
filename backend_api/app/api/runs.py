@@ -371,9 +371,16 @@ async def list_project_runs(
 
 
 async def execute_run(run_id: UUID):
-    """Background task to execute a run"""
+    """
+    Background task to execute a run using AI-generated code.
+    
+    This function now uses real AI code generation via OpenAI API
+    instead of hardcoded demo/sample templates.
+    """
     import asyncio
     from app.core.database import AsyncSessionLocal
+    from app.services.ai_code_generator import get_ai_generator
+    from app.services.openai_service import get_openai_service
     
     async with AsyncSessionLocal() as db:
         try:
@@ -386,6 +393,20 @@ async def execute_run(run_id: UUID):
             if not project:
                 return
             
+            # Check if OpenAI API is available for real code generation
+            openai_service = get_openai_service()
+            if openai_service is None:
+                # Mark as failed if no OpenAI API key
+                await crud_execution.update_status(
+                    db, execution=execution, status=ExecutionStatus.FAILED
+                )
+                await db.commit()
+                print("Error: OpenAI API key is required for code generation")
+                return
+            
+            # Get AI generator for real code generation
+            ai_generator = get_ai_generator()
+            
             # Execute each step
             for step in execution.steps:
                 if execution.status == ExecutionStatus.STOPPED:
@@ -397,21 +418,36 @@ async def execute_run(run_id: UUID):
                 )
                 await db.commit()
                 
-                await asyncio.sleep(2)  # Simulate work
-                
-                # Generate sample files for certain steps
+                # Generate real AI code for project structure steps
                 if "structure" in step.name.lower():
-                    sample_files = generate_project_files()
-                    for file_data in sample_files:
-                        if file_data["type"] == "file":
+                    try:
+                        # Use AI to generate project files based on the execution prompt
+                        project_name = project.name or "generated_project"
+                        task_desc = execution.prompt or "Create a project"
+                        
+                        # Generate files using AI
+                        ai_files = await ai_generator.generate_saas_files(project_name, task_desc)
+                        
+                        for file_data in ai_files:
                             file_create = ProjectFileCreate(
-                                file_path=file_data["path"],
+                                file_path=file_data.get("path", ""),
                                 content=file_data.get("content", ""),
-                                language=detect_language(file_data["path"]),
+                                language=file_data.get("language") or detect_language(file_data.get("path", "")),
                             )
                             await crud_project_file.create_with_project(
                                 db, obj_in=file_create, project_id=project.id
                             )
+                    except Exception as gen_error:
+                        print(f"AI generation error: {gen_error}")
+                        # Update step with error but continue
+                        await crud_execution_step.update_status(
+                            db, 
+                            step=step, 
+                            status=StepStatus.FAILED,
+                            logs=f"AI generation failed: {str(gen_error)}",
+                        )
+                        await db.commit()
+                        continue
                 
                 # Update step to completed
                 await crud_execution_step.update_status(
@@ -466,34 +502,6 @@ def detect_language(file_path: str) -> Optional[str]:
     return language_map.get(ext, "text")
 
 
-def generate_project_files() -> List[dict]:
-    """Generate sample project file structure"""
-    return [
-        {
-            "name": "src",
-            "path": "src",
-            "type": "directory",
-            "children": [
-                {
-                    "name": "app",
-                    "path": "src/app",
-                    "type": "directory",
-                    "children": [
-                        {"name": "page.tsx", "path": "src/app/page.tsx", "type": "file", "content": "'use client'\n\nexport default function Home() {\n  return <div>Hello World</div>\n}"},
-                        {"name": "layout.tsx", "path": "src/app/layout.tsx", "type": "file", "content": "export default function RootLayout({ children }) {\n  return (\n    <html>\n      <body>{children}</body>\n    </html>\n  )\n}"},
-                    ],
-                },
-                {
-                    "name": "components",
-                    "path": "src/components",
-                    "type": "directory",
-                    "children": [
-                        {"name": "Button.tsx", "path": "src/components/Button.tsx", "type": "file", "content": "export function Button({ children, onClick }) {\n  return <button onClick={onClick}>{children}</button>\n}"},
-                    ],
-                },
-            ],
-        },
-        {"name": "package.json", "path": "package.json", "type": "file", "content": '{\n  "name": "my-app",\n  "version": "1.0.0",\n  "dependencies": {\n    "react": "^18.0.0",\n    "next": "^14.0.0"\n  }\n}'},
-        {"name": "README.md", "path": "README.md", "type": "file", "content": "# My App\n\nGenerated by Masidy AI"},
-        {"name": ".gitignore", "path": ".gitignore", "type": "file", "content": "node_modules/\n.next/\n.env"},
-    ]
+# REMOVED: Old generate_project_files() function that generated demo/sample code.
+# Project file generation now uses real AI via OpenAI API in execute_run().
+# See app/services/ai_code_generator.py for the AI-powered generation.

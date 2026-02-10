@@ -37,7 +37,7 @@ The Masidy Agent platform now includes real AI-powered code generation using Ope
 
 5. **Error Handling & Validation**
    - Graceful API error handling
-   - Automatic fallback to templates if OpenAI unavailable
+   - Clear error messages when API key is missing (no template fallback)
    - Code validation for completeness
    - Syntax checking (basic)
    - Rate limiting awareness
@@ -152,19 +152,23 @@ All code generation endpoints now use AI:
 - `POST /api/plan-and-execute` - Create and execute project
 - `GET /api/executions/{id}/stream` - Stream AI code generation via SSE
 
-### Fallback Mechanism
+### API Key Requirement
 
-If OpenAI is unavailable (no API key, network error, rate limit), the system automatically falls back to template-based generation:
+**IMPORTANT**: OpenAI API key is REQUIRED for code generation. There is NO template or demo fallback:
 
 ```python
 async def get_project_files_ai(project_name, task_desc, flow):
-    """Generate files using AI with automatic fallback"""
-    try:
-        # Try AI generation
-        return await ai_generator.generate_files(...)
-    except Exception as e:
-        # Fallback to templates
-        return get_project_files_template(...)
+    """Generate files using AI - requires OpenAI API key"""
+    openai_service = get_openai_service()
+    
+    if openai_service is None:
+        raise ValueError(
+            "OpenAI API key is required for project generation. "
+            "Please set the OPENAI_API_KEY environment variable."
+        )
+    
+    # Generate using real AI
+    return await ai_generator.generate_files(...)
 ```
 
 ## Usage Examples
@@ -300,7 +304,7 @@ Or with issues:
 
 - Small delays (0.1s) between file generations
 - Automatic error handling for rate limits
-- Fallback to templates if rate limited
+- Clear error messages if rate limited
 
 ### Caching
 
@@ -331,7 +335,7 @@ Future enhancement: Cache common patterns to reduce API calls
 **Solutions**:
 1. Switch to `gpt-3.5-turbo` (10x cheaper, faster)
 2. Reduce `OPENAI_MAX_TOKENS`
-3. Use template fallback for simple projects
+3. Start with smaller projects to test
 
 ## Future Enhancements
 
@@ -376,19 +380,31 @@ cd backend_api
 python test_openai_integration.py
 ```
 
-Expected output:
+Expected output (with API key):
 ```
 🧪 Testing OpenAI Integration
 
 ============================================================
-Test 1: No API key - should use template fallback
+Test 1: OpenAI API Key Configuration
 ============================================================
-✅ Correctly returned empty when no API key
-✅ Template fallback generated 25 files
+✅ OpenAI Service initialized successfully
+✅ AI Generator initialized: True
+
+============================================================
+Test 2: AI Code Generation
+============================================================
+✅ AI Generation returned 17 files
 
 ...
 
 ✅ All integration tests passed!
+```
+
+If API key is missing:
+```
+❌ OpenAI Service NOT initialized - API key is missing!
+⚠️  NOTE: There is no demo/template fallback.
+    All code generation requires a valid OpenAI API key.
 ```
 
 ## Security Best Practices

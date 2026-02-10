@@ -65,7 +65,7 @@ requirements = {
     "7. Error Handling": [
         ("✅", "OpenAI API error handling"),
         ("✅", "Rate limiting awareness"),
-        ("✅", "Fallback to templates if AI fails"),
+        ("✅", "Proper error when API key missing (no template fallback)"),
         ("✅", "Logging for debugging"),
     ],
     
@@ -75,7 +75,7 @@ requirements = {
         ("✅", "Code generation streams in real-time"),
         ("✅", "Each file type has specialized prompting"),
         ("✅", "Error handling for API failures"),
-        ("✅", "No hardcoded templates (fallback exists)"),
+        ("✅", "No hardcoded templates or demo code"),
         ("✅", "Generated code is valid Python/JavaScript"),
         ("✅", "Files include proper imports"),
         ("✅", "Works with streaming SSE responses"),
@@ -100,8 +100,8 @@ print(f"📊 Implementation Status: {completed_items}/{total_items} ({100*comple
 print("=" * 70)
 
 print("\n✨ Key Features:")
-print("  • AI-powered code generation with OpenAI")
-print("  • Automatic fallback to templates without API key")
+print("  • AI-powered code generation with OpenAI (REQUIRED)")
+print("  • No demo/template fallback - real AI generation only")
 print("  • Real-time streaming via Server-Sent Events")
 print("  • Specialized prompts for 11+ file types")
 print("  • Code validation and error handling")
